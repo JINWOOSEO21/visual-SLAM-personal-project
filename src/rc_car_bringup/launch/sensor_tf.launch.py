@@ -40,18 +40,26 @@ def generate_launch_description():
     # base_link → camera_link
     # 카메라가 전방(x)을 바라봄, 광학 프레임과 일치하도록 설정
     base_to_camera = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='base_to_camera_tf',
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="base_to_camera_tf",
         arguments=[
-            '--x', '0.160',    # 전방 16.0cm
-            '--y', '-0.005',   # 우측 0.5cm (거의 중심선)
-            '--z', '0.053',    # 상방 5.3cm
-            '--roll', '0.0',
-            '--pitch', '0.0',
-            '--yaw', '0.0',
-            '--frame-id', 'base_link',
-            '--child-frame-id', 'camera_link',
+            "--x",
+            "0.160",  # 전방 16.0cm
+            "--y",
+            "-0.005",  # 우측 0.5cm (거의 중심선)
+            "--z",
+            "0.053",  # 상방 5.3cm
+            "--roll",
+            "0.0",
+            "--pitch",
+            "0.0",
+            "--yaw",
+            "0.0",
+            "--frame-id",
+            "base_link",
+            "--child-frame-id",
+            "camera_link",
         ],
     )
 
@@ -62,41 +70,59 @@ def generate_launch_description():
     # child-frame-id 는 camera_ros 노드가 이미지 헤더에 박는 frame_id ('camera') 와 일치시켜야
     # rtabmap 이 TF lookup 가능. (기존 'camera_optical_frame' → 'camera' 로 변경)
     camera_to_optical = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='camera_to_optical_tf',
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="camera_to_optical_tf",
         arguments=[
-            '--x', '0.0',
-            '--y', '0.0',
-            '--z', '0.0',
-            '--roll', '-1.5707963',   # -π/2
-            '--pitch', '0.0',
-            '--yaw', '-1.5707963',    # -π/2
-            '--frame-id', 'camera_link',
-            '--child-frame-id', 'camera',
+            "--x",
+            "0.0",
+            "--y",
+            "0.0",
+            "--z",
+            "0.0",
+            "--roll",
+            "-1.5707963",  # -π/2
+            "--pitch",
+            "0.0",
+            "--yaw",
+            "-1.5707963",  # -π/2
+            "--frame-id",
+            "camera_link",
+            "--child-frame-id",
+            "camera",
         ],
     )
 
     # base_link → imu_link
     # IMU x→로봇우측(-y), y→로봇전방(+x), z→로봇상방(+z)  ∴ yaw=-π/2
     base_to_imu = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='base_to_imu_tf',
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="base_to_imu_tf",
         arguments=[
-            '--x', '0.060',   # 전방 6.0cm
-            '--y', '-0.065',  # 우측 6.5cm
-            '--z', '0.023',   # 상방 2.3cm
-            '--roll', '0.0',
-            '--pitch', '0.0',
-            '--yaw', '-1.5707963',   # -π/2 : IMU y축이 로봇 전방
-            '--frame-id', 'base_link',
-            '--child-frame-id', 'imu_link',
+            "--x",
+            "0.060",  # 전방 6.0cm
+            "--y",
+            "-0.065",  # 우측 6.5cm
+            "--z",
+            "0.023",  # 상방 2.3cm
+            "--roll",
+            "0.0",
+            "--pitch",
+            "0.0",
+            "--yaw",
+            "-1.5707963",  # -π/2 : IMU y축이 로봇 전방
+            "--frame-id",
+            "base_link",
+            "--child-frame-id",
+            "imu_link",
         ],
     )
 
-    return LaunchDescription([
-        base_to_camera,
-        camera_to_optical,
-        base_to_imu,
-    ])
+    return LaunchDescription(
+        [
+            base_to_camera,
+            camera_to_optical,
+            base_to_imu,
+        ]
+    )

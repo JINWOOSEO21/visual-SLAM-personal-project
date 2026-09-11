@@ -26,26 +26,26 @@ ENB = 25
 IN3 = 27
 IN4 = 26
 # 엔코더
-LEFT_ENC  = 17
+LEFT_ENC = 17
 RIGHT_ENC = 16
 
 # ─── 테스트 파라미터 ──────────────────────────────────────────
-DURATION    = 3.0   # 구동 시간 (초)
-DUTY_CYCLE  = 85    # PWM duty (%)
-PWM_FREQ    = 1000  # PWM 주파수 (Hz)
+DURATION = 3.0  # 구동 시간 (초)
+DUTY_CYCLE = 85  # PWM duty (%)
+PWM_FREQ = 1000  # PWM 주파수 (Hz)
 MEASURE_START = 1.0  # tick 집계 시작 시각 (초)
 
 # ─── 틱 카운터 ────────────────────────────────────────────────
-left_ticks  = 0
+left_ticks = 0
 right_ticks = 0
 
 
-def cb_left(channel):
+def cb_left(_channel):
     global left_ticks
     left_ticks += 1
 
 
-def cb_right(channel):
+def cb_right(_channel):
     global right_ticks
     right_ticks += 1
 
@@ -60,9 +60,9 @@ def setup():
         GPIO.output(pin, GPIO.LOW)
 
     # 엔코더 핀
-    GPIO.setup(LEFT_ENC,  GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    GPIO.setup(LEFT_ENC, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     GPIO.setup(RIGHT_ENC, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-    GPIO.add_event_detect(LEFT_ENC,  GPIO.BOTH, callback=cb_left,  bouncetime=1)
+    GPIO.add_event_detect(LEFT_ENC, GPIO.BOTH, callback=cb_left, bouncetime=1)
     GPIO.add_event_detect(RIGHT_ENC, GPIO.BOTH, callback=cb_right, bouncetime=1)
 
     pwm_a = GPIO.PWM(ENA, PWM_FREQ)
@@ -73,7 +73,7 @@ def setup():
 
 
 def drive_left(pwm_a, duty, reverse=False):
-    GPIO.output(IN1, GPIO.LOW  if reverse else GPIO.HIGH)
+    GPIO.output(IN1, GPIO.LOW if reverse else GPIO.HIGH)
     GPIO.output(IN2, GPIO.HIGH if reverse else GPIO.LOW)
     pwm_a.ChangeDutyCycle(duty)
 
@@ -85,7 +85,7 @@ def stop_left(pwm_a):
 
 
 def drive_right(pwm_b, duty, reverse=False):
-    GPIO.output(IN3, GPIO.LOW  if reverse else GPIO.HIGH)
+    GPIO.output(IN3, GPIO.LOW if reverse else GPIO.HIGH)
     GPIO.output(IN4, GPIO.HIGH if reverse else GPIO.LOW)
     pwm_b.ChangeDutyCycle(duty)
 
@@ -112,11 +112,11 @@ def run_test(pwm_a, pwm_b, reverse=False):
     right_ticks = 0
 
     if DURATION <= MEASURE_START:
-        raise ValueError('DURATION은 MEASURE_START보다 커야 합니다.')
+        raise ValueError("DURATION은 MEASURE_START보다 커야 합니다.")
 
-    direction = '역방향' if reverse else '정방향'
-    print(f'\n=== 양쪽 바퀴 구동 시작 ({direction}, {DURATION}s @ duty={DUTY_CYCLE}%) ===')
-    print(f'  tick 집계 구간: {MEASURE_START:.1f}s ~ {DURATION:.1f}s')
+    direction = "역방향" if reverse else "정방향"
+    print(f"\n=== 양쪽 바퀴 구동 시작 ({direction}, {DURATION}s @ duty={DUTY_CYCLE}%) ===")
+    print(f"  tick 집계 구간: {MEASURE_START:.1f}s ~ {DURATION:.1f}s")
 
     drive_both(pwm_a, pwm_b, DUTY_CYCLE, reverse)
     start_left = None
@@ -129,14 +129,17 @@ def run_test(pwm_a, pwm_b, reverse=False):
             start_right = right_ticks
 
         if start_left is None:
-            print(f'  [{elapsed:4.1f}s] warming up  left={left_ticks:5d}  right={right_ticks:5d}',
-                  end='\r', flush=True)
+            print(
+                f"  [{elapsed:4.1f}s] warming up  left={left_ticks:5d}  right={right_ticks:5d}",
+                end="\r",
+                flush=True,
+            )
         else:
             print(
-                f'  [{elapsed:4.1f}s] '
-                f'left_delta={left_ticks - start_left:5d}  '
-                f'right_delta={right_ticks - start_right:5d}',
-                end='\r',
+                f"  [{elapsed:4.1f}s] "
+                f"left_delta={left_ticks - start_left:5d}  "
+                f"right_delta={right_ticks - start_right:5d}",
+                end="\r",
                 flush=True,
             )
         time.sleep(0.1)
@@ -150,30 +153,30 @@ def run_test(pwm_a, pwm_b, reverse=False):
         start_left = end_left
         start_right = end_right
 
-    print('\n--- 결과 ---')
-    print(f'  집계 시작({MEASURE_START:.1f}s) 왼쪽/오른쪽 tick: {start_left} / {start_right}')
-    print(f'  집계 종료({DURATION:.1f}s) 왼쪽/오른쪽 tick: {end_left} / {end_right}')
-    print(f'  왼쪽 엔코더  증가량: {end_left - start_left}')
-    print(f'  오른쪽 엔코더 증가량: {end_right - start_right}')
+    print("\n--- 결과 ---")
+    print(f"  집계 시작({MEASURE_START:.1f}s) 왼쪽/오른쪽 tick: {start_left} / {start_right}")
+    print(f"  집계 종료({DURATION:.1f}s) 왼쪽/오른쪽 tick: {end_left} / {end_right}")
+    print(f"  왼쪽 엔코더  증가량: {end_left - start_left}")
+    print(f"  오른쪽 엔코더 증가량: {end_right - start_right}")
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--reverse', action='store_true', help='바퀴를 역방향으로 구동')
+    parser.add_argument("--reverse", action="store_true", help="바퀴를 역방향으로 구동")
     args = parser.parse_args()
 
     pwm_a, pwm_b = setup()
     try:
         run_test(pwm_a, pwm_b, args.reverse)
     except KeyboardInterrupt:
-        print('\n[중단됨]')
+        print("\n[중단됨]")
     finally:
         stop_both(pwm_a, pwm_b)
         pwm_a.stop()
         pwm_b.stop()
         GPIO.cleanup()
-        print('\nGPIO 정리 완료.')
+        print("\nGPIO 정리 완료.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

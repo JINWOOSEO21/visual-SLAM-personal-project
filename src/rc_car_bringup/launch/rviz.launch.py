@@ -22,7 +22,7 @@ Fixed Frame 은 map 이다. rtabmap 이 map→odom 을 아직 발행하기 전�
     ros2 launch rc_car_bringup rviz.launch.py
 """
 
-import os
+from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -32,27 +32,27 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    default_config = os.path.join(
-        get_package_share_directory('rc_car_bringup'),
-        'config',
-        'slam.rviz',
+    default_config = str(
+        Path(get_package_share_directory("rc_car_bringup")) / "config" / "slam.rviz"
     )
 
-    rviz_config = LaunchConfiguration('rviz_config')
+    rviz_config = LaunchConfiguration("rviz_config")
 
     rviz_node = Node(
-        package='rviz2',
-        executable='rviz2',
-        name='rviz2',
-        arguments=['-d', rviz_config],
-        output='screen',
+        package="rviz2",
+        executable="rviz2",
+        name="rviz2",
+        arguments=["-d", rviz_config],
+        output="screen",
     )
 
-    return LaunchDescription([
-        DeclareLaunchArgument(
-            'rviz_config',
-            default_value=default_config,
-            description='RViz2 config file path',
-        ),
-        rviz_node,
-    ])
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument(
+                "rviz_config",
+                default_value=default_config,
+                description="RViz2 config file path",
+            ),
+            rviz_node,
+        ]
+    )

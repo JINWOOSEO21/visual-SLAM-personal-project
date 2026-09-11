@@ -29,7 +29,7 @@ class PID:
         self.integral_limit = integral_limit
         self.derivative_tau = derivative_tau  # low-pass time constant [s]
 
-        self._integral   = 0.0
+        self._integral = 0.0
         self._prev_error = 0.0
         self._d_filtered = 0.0
 
@@ -53,8 +53,7 @@ class PID:
 
         # Integral with anti-windup clamp
         self._integral += self.ki * error * dt
-        self._integral = max(-self.integral_limit,
-                             min(self.integral_limit, self._integral))
+        self._integral = max(-self.integral_limit, min(self.integral_limit, self._integral))
 
         # Derivative with low-pass filter (avoids amplifying high-freq noise)
         d_raw = self.kd * (error - self._prev_error) / dt
@@ -68,6 +67,6 @@ class PID:
     # ------------------------------------------------------------------
     def reset(self):
         """Clear integral and derivative state (call on direction reversal)."""
-        self._integral   = 0.0
+        self._integral = 0.0
         self._prev_error = 0.0
         self._d_filtered = 0.0
