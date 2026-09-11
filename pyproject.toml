@@ -1,0 +1,59 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"          # requires-python 있으면 생략 가능
+src = ["src", "scripts"]          # 1st-party 판별 기준 경로
+
+[tool.ruff.format]
+docstring-code-format = true      # docstring 안 코드블록도 포맷
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # import 정렬
+    "UP",        # 구문 현대화
+    "B",         # bugbear (버그 유발 패턴)
+    "SIM",       # 단순화 가능한 코드
+    "C4",        # comprehension
+    "TID",       # import 정돈
+    "PTH",       # os.path -> pathlib
+    "NPY",       # numpy 구버전 API
+    "RUF",       # ruff 고유 규칙
+    "ARG",       # 안 쓰는 인자
+    "T20",       # print 잔존물
+]
+ignore = [
+    "E501",      # 줄 길이 -> 포매터 담당
+    "B008",      # 기본인자 함수호출 (typer/hydra 패턴 흔함)
+]
+unfixable = [
+    "F401",      # 안 쓰는 import: 작업중 코드 날아가는 사고 방지
+    "F841",      # 안 쓰는 변수: 위와 동일
+    "TID251",    # 금지 API: 판단 필요
+    "TID252",    # 상대 import: 판단 필요
+    "ERA",       # 주석처리 코드: 절대 자동삭제 금지
+    "T20",       # print: autofix 가 CLI 스크립트의 출력을 통째로 지운다
+]
+
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"sys.path".msg = "경로 조작 금지. pip install -e . 로 패키지를 설치하세요"
+"os.getcwd".msg = "CWD 의존 금지. Path(__file__).resolve().parent 기준 사용"
+"pathlib.Path.cwd".msg = "CWD 의존 금지. Path(__file__).resolve().parent 기준 사용"
+"scripts".msg = "scripts는 진입점 전용. 공용 로직은 src/ 로 옮기세요"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]                  # 의도적 재수출
+# ROS2 패키지는 tests/ 가 아니라 test/ 를 쓴다 (ament 관례)
+"**/test/**" = ["S101", "ARG", "TID251"]  # assert, 픽스처 인자 허용
+"**/scripts/**" = ["T201"]                # CLI print 허용
+# 콘솔 진입점이라 패키지 안에 있지만 실질은 CLI 리포트 도구
+"**/analyze_pid_step_response.py" = ["T201"]
+# ament 가 생성한 보일러플레이트 — 손대지 않는다
+"**/test/test_copyright.py" = ["ALL"]
+"**/test/test_flake8.py" = ["ALL"]
+"**/test/test_pep257.py" = ["ALL"]
+"**/*.ipynb" = ["T201", "E402"]           # 노트북 특성

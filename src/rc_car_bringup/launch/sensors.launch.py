@@ -1,5 +1,5 @@
 """
-전체 센서 통합 launch 파일 (Phase 1–5)
+전체 센서 통합 launch 파일 (Phase 1-5)
 
 실행되는 노드:
     1. camera_ros (카메라 이미지 퍼블리시)
@@ -20,60 +20,54 @@
     ros2 launch motor_controller motor.launch.py                   # open-loop
 """
 
-import os
+from pathlib import Path
 
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from ament_index_python.packages import get_package_share_directory
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    bringup_dir = get_package_share_directory('rc_car_bringup')
-    imu_dir = get_package_share_directory('mpu6050_driver')
-    odom_dir = get_package_share_directory('wheel_odometry')
+    bringup_dir = Path(get_package_share_directory("rc_car_bringup"))
+    imu_dir = Path(get_package_share_directory("mpu6050_driver"))
+    odom_dir = Path(get_package_share_directory("wheel_odometry"))
 
     # IMU 파이프라인 (mpu6050 + madgwick filter)
     imu_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(imu_dir, 'launch', 'imu.launch.py')
-        )
+        PythonLaunchDescriptionSource(str(imu_dir / "launch" / "imu.launch.py"))
     )
 
     # Static TF (base_link → camera_link, imu_link)
     tf_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(bringup_dir, 'launch', 'sensor_tf.launch.py')
-        )
+        PythonLaunchDescriptionSource(str(bringup_dir / "launch" / "sensor_tf.launch.py"))
     )
 
     # 카메라 노드 (camera_ros)
     camera_node = Node(
-        package='camera_ros',
-        executable='camera_node',
-        name='camera',
-        parameters=[{
-            'width': 640,
-            'height': 480,
-            'format': 'RGB888',
-        }],
-        output='screen',
+        package="camera_ros",
+        executable="camera_node",
+        name="camera",
+        parameters=[
+            {
+                "width": 640,
+                "height": 480,
+                "format": "RGB888",
+            }
+        ],
+        output="screen",
     )
 
     # 휠 오도메트리 (encoder + odometry)
     # publish_tf=False — TF는 EKF가 broadcast함
     odom_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(odom_dir, 'launch', 'odometry.launch.py')
-        )
+        PythonLaunchDescriptionSource(str(odom_dir / "launch" / "odometry.launch.py"))
     )
 
     # EKF 융합 (wheel odom + IMU → /odometry/filtered, odom→base_link TF)
     ekf_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(bringup_dir, 'launch', 'ekf.launch.py')
-        )
+        PythonLaunchDescriptionSource(str(bringup_dir / "launch" / "ekf.launch.py"))
     )
 
     # NOTE: 모터 제어 노드(motor_driver_node / pid_controller_node)는 여기서
@@ -82,10 +76,12 @@ def generate_launch_description():
     #   ros2 launch motor_controller motor.launch.py            (open-loop)
     #   ros2 launch pid_velocity_controller pid_controller.launch.py  (closed-loop)
 
-    return LaunchDescription([
-        imu_launch,
-        tf_launch,
-        camera_node,
-        odom_launch,
-        ekf_launch,
-    ])
+    return LaunchDescription(
+        [
+            imu_launch,
+            tf_launch,
+            camera_node,
+            odom_launch,
+            ekf_launch,
+        ]
+    )

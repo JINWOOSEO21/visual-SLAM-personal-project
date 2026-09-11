@@ -15,22 +15,23 @@ Prerequisite:
     or start encoder_node separately.
 """
 
-import os
+from pathlib import Path
+
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    pkg_share   = get_package_share_directory('pid_velocity_controller')
-    params_file = os.path.join(pkg_share, 'config', 'pid_params.yaml')
+    pkg_share = Path(get_package_share_directory("pid_velocity_controller"))
+    params_file = str(pkg_share / "config" / "pid_params.yaml")
 
     pid_node = Node(
-        package='pid_velocity_controller',
-        executable='pid_controller_node',
-        name='pid_controller_node',
+        package="pid_velocity_controller",
+        executable="pid_controller_node",
+        name="pid_controller_node",
         parameters=[params_file],
-        output='screen',
+        output="screen",
     )
 
     return LaunchDescription([pid_node])

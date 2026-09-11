@@ -1,15 +1,13 @@
-import os
 import struct
 import time
+from pathlib import Path
 
 import rclpy
+import smbus
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from sensor_msgs.msg import Imu, Temperature
-
-import smbus
-
 
 # MPU6050 레지스터 주소
 _MPU6050_ADDR = 0x68
@@ -32,33 +30,32 @@ _DEG_TO_RAD = 0.017453292519943
 
 
 class Mpu6050Node(Node):
-
     def __init__(self):
-        super().__init__('mpu6050_node')
+        super().__init__("mpu6050_node")
 
         # 파라미터 선언
-        self.declare_parameter('i2c_bus', 1)
-        self.declare_parameter('device_address', _MPU6050_ADDR)
-        self.declare_parameter('frequency', 50.0)
-        self.declare_parameter('frame_id', 'imu_link')
-        self.declare_parameter('accel_range', 0)  # 0=±2g, 1=±4g, 2=±8g, 3=±16g
-        self.declare_parameter('gyro_range', 0)   # 0=±250, 1=±500, 2=±1000, 3=±2000 °/s
-        self.declare_parameter('calibration_samples', 200)
+        self.declare_parameter("i2c_bus", 1)
+        self.declare_parameter("device_address", _MPU6050_ADDR)
+        self.declare_parameter("frequency", 50.0)
+        self.declare_parameter("frame_id", "imu_link")
+        self.declare_parameter("accel_range", 0)  # 0=±2g, 1=±4g, 2=±8g, 3=±16g
+        self.declare_parameter("gyro_range", 0)  # 0=±250, 1=±500, 2=±1000, 3=±2000 °/s
+        self.declare_parameter("calibration_samples", 200)
 
         # 가속도계 보정: a_corr[i] = (a_raw[i] - bias[i]) * scale[i]
         # 파일이 있으면 파일 값이 우선, 없으면 아래 파라미터 값을 쓴다.
         # 빈 문자열이면 패키지 share 의 config/imu_calibration.yaml 을 찾는다.
-        self.declare_parameter('calibration_file', '')
-        self.declare_parameter('accel_bias', [0.0, 0.0, 0.0])
-        self.declare_parameter('accel_scale', [1.0, 1.0, 1.0])
+        self.declare_parameter("calibration_file", "")
+        self.declare_parameter("accel_bias", [0.0, 0.0, 0.0])
+        self.declare_parameter("accel_scale", [1.0, 1.0, 1.0])
 
-        self._bus_num = self.get_parameter('i2c_bus').value
-        self._addr = self.get_parameter('device_address').value
-        self._frame_id = self.get_parameter('frame_id').value
-        self._accel_range = self.get_parameter('accel_range').value
-        self._gyro_range = self.get_parameter('gyro_range').value
-        freq = self.get_parameter('frequency').value
-        cal_samples = self.get_parameter('calibration_samples').value
+        self._bus_num = self.get_parameter("i2c_bus").value
+        self._addr = self.get_parameter("device_address").value
+        self._frame_id = self.get_parameter("frame_id").value
+        self._accel_range = self.get_parameter("accel_range").value
+        self._gyro_range = self.get_parameter("gyro_range").value
+        freq = self.get_parameter("frequency").value
+        cal_samples = self.get_parameter("calibration_samples").value
 
         # I2C 초기화
         self._bus = smbus.SMBus(self._bus_num)
@@ -66,9 +63,9 @@ class Mpu6050Node(Node):
         # WHO_AM_I 확인
         who = self._bus.read_byte_data(self._addr, _WHO_AM_I)
         if who != 0x68:
-            self.get_logger().error(f'WHO_AM_I mismatch: expected 0x68, got 0x{who:02x}')
-            raise RuntimeError('MPU6050 not found')
-        self.get_logger().info(f'MPU6050 detected at 0x{self._addr:02x}')
+            self.get_logger().error(f"WHO_AM_I mismatch: expected 0x68, got 0x{who:02x}")
+            raise RuntimeError("MPU6050 not found")
+        self.get_logger().info(f"MPU6050 detected at 0x{self._addr:02x}")
 
         # 센서 초기화
         self._bus.write_byte_data(self._addr, _PWR_MGMT_1, 0x00)  # 슬립 해제
@@ -85,83 +82,83 @@ class Mpu6050Node(Node):
         self._accel_corr_bias, self._accel_corr_scale = self._load_accel_calibration()
 
         # 퍼블리셔
-        self._imu_pub = self.create_publisher(Imu, 'imu/data_raw', 10)
-        self._temp_pub = self.create_publisher(Temperature, 'imu/temperature', 10)
+        self._imu_pub = self.create_publisher(Imu, "imu/data_raw", 10)
+        self._temp_pub = self.create_publisher(Temperature, "imu/temperature", 10)
 
         # 자이로 바이어스 추정 (정지 상태에서) — 온도에 따라 변하므로 매 기동마다 측정.
         # 가속도는 여기서 보정하지 않는다(정지 시에도 중력이 실려 있어 bias 와 구분 불가).
         # 대신 보정 후 |a| 가 9.81 에 맞는지 확인하는 헬스체크로만 쓴다.
-        self.get_logger().info(f'Calibrating bias ({cal_samples} samples)... keep sensor still!')
+        self.get_logger().info(f"Calibrating bias ({cal_samples} samples)... keep sensor still!")
         self._gyro_bias = [0.0, 0.0, 0.0]
         self._accel_rest = [0.0, 0.0, 0.0]
         self._calibrate(cal_samples)
         self.get_logger().info(
-            f'Calibration done: '
-            f'gyro_bias=[{self._gyro_bias[0]:.4f}, {self._gyro_bias[1]:.4f}, {self._gyro_bias[2]:.4f}] rad/s'
+            f"Calibration done: "
+            f"gyro_bias=[{self._gyro_bias[0]:.4f}, {self._gyro_bias[1]:.4f}, {self._gyro_bias[2]:.4f}] rad/s"
         )
         self._check_gravity()
 
         # 타이머
         self._timer = self.create_timer(1.0 / freq, self._timer_callback)
-        self.get_logger().info(f'Publishing IMU data at {freq} Hz on /imu/data_raw')
+        self.get_logger().info(f"Publishing IMU data at {freq} Hz on /imu/data_raw")
 
     def _load_accel_calibration(self):
         """가속도계 bias/scale 을 YAML 파일 또는 파라미터에서 읽는다.
 
         파일이 우선하고, 없거나 읽을 수 없으면 파라미터 값(기본 무보정)을 쓴다.
         """
-        bias = list(self.get_parameter('accel_bias').value)
-        scale = list(self.get_parameter('accel_scale').value)
+        bias = list(self.get_parameter("accel_bias").value)
+        scale = list(self.get_parameter("accel_scale").value)
 
-        path = self.get_parameter('calibration_file').value
-        if not path:
+        configured = self.get_parameter("calibration_file").value
+        if configured:
+            path = Path(configured)
+        else:
             try:
-                path = os.path.join(
-                    get_package_share_directory('mpu6050_driver'),
-                    'config', 'imu_calibration.yaml')
+                share_dir = Path(get_package_share_directory("mpu6050_driver"))
+                path = share_dir / "config" / "imu_calibration.yaml"
             except Exception:  # 패키지 share 를 못 찾는 경우(소스 직접 실행 등)
-                path = ''
+                path = None
 
-        if path and os.path.isfile(path):
+        if path is not None and path.is_file():
             try:
-                with open(path) as f:
+                with path.open() as f:
                     data = yaml.safe_load(f) or {}
-                accel = data.get('accel', {})
-                if 'bias' in accel:
-                    bias = [float(v) for v in accel['bias']]
-                if 'scale' in accel:
-                    scale = [float(v) for v in accel['scale']]
-                self.get_logger().info(f'Accel calibration loaded from {path}')
+                accel = data.get("accel", {})
+                if "bias" in accel:
+                    bias = [float(v) for v in accel["bias"]]
+                if "scale" in accel:
+                    scale = [float(v) for v in accel["scale"]]
+                self.get_logger().info(f"Accel calibration loaded from {path}")
             except Exception as e:
-                self.get_logger().warn(
-                    f'Failed to read {path} ({e}); falling back to parameters')
-        elif path:
-            self.get_logger().warn(
-                f'Calibration file not found: {path}; using parameter values')
+                self.get_logger().warn(f"Failed to read {path} ({e}); falling back to parameters")
+        elif path is not None:
+            self.get_logger().warn(f"Calibration file not found: {path}; using parameter values")
 
         if len(bias) != 3 or len(scale) != 3:
-            self.get_logger().error(
-                'accel_bias/accel_scale must have 3 elements; using identity')
+            self.get_logger().error("accel_bias/accel_scale must have 3 elements; using identity")
             bias, scale = [0.0] * 3, [1.0] * 3
         if any(s == 0.0 for s in scale):
-            self.get_logger().error('accel_scale contains 0; using identity scale')
+            self.get_logger().error("accel_scale contains 0; using identity scale")
             scale = [1.0] * 3
 
         if bias == [0.0] * 3 and scale == [1.0] * 3:
             self.get_logger().warn(
-                'Accelerometer is UNCALIBRATED (bias=0, scale=1). '
-                'Run scripts/calibrate_accel.py — MPU6050 clones are often '
-                '10%+ off on accel sensitivity.')
+                "Accelerometer is UNCALIBRATED (bias=0, scale=1). "
+                "Run scripts/calibrate_accel.py — MPU6050 clones are often "
+                "10%+ off on accel sensitivity."
+            )
         else:
             self.get_logger().info(
-                f'Accel correction: bias=[{bias[0]:.4f}, {bias[1]:.4f}, {bias[2]:.4f}] m/s², '
-                f'scale=[{scale[0]:.5f}, {scale[1]:.5f}, {scale[2]:.5f}]')
+                f"Accel correction: bias=[{bias[0]:.4f}, {bias[1]:.4f}, {bias[2]:.4f}] m/s², "
+                f"scale=[{scale[0]:.5f}, {scale[1]:.5f}, {scale[2]:.5f}]"
+            )
         return bias, scale
 
     def _read_raw_data(self):
         """가속도(6) + 온도(2) + 자이로(6) = 14바이트 한번에 읽기."""
         data = self._bus.read_i2c_block_data(self._addr, _ACCEL_XOUT_H, 14)
-        vals = struct.unpack('>hhhhhhh', bytes(data))
+        vals = struct.unpack(">hhhhhhh", bytes(data))
         # vals: ax, ay, az, temp, gx, gy, gz
         return vals
 
@@ -208,12 +205,12 @@ class Mpu6050Node(Node):
         max_std = max(gyro_std)
         if max_std > 0.01:
             self.get_logger().warn(
-                f'Sensor was NOT still during calibration (max gyro std={max_std:.4f} rad/s). '
-                f'Bias estimate may be inaccurate — restart node with sensor stationary.'
+                f"Sensor was NOT still during calibration (max gyro std={max_std:.4f} rad/s). "
+                f"Bias estimate may be inaccurate — restart node with sensor stationary."
             )
         else:
             self.get_logger().info(
-                f'Stationary check OK (gyro std=[{gyro_std[0]:.5f}, {gyro_std[1]:.5f}, {gyro_std[2]:.5f}] rad/s)'
+                f"Stationary check OK (gyro std=[{gyro_std[0]:.5f}, {gyro_std[1]:.5f}, {gyro_std[2]:.5f}] rad/s)"
             )
 
     def _check_gravity(self):
@@ -221,19 +218,19 @@ class Mpu6050Node(Node):
         mag = sum(v * v for v in self._accel_rest) ** 0.5
         err = mag - _GRAVITY
         if abs(err) <= 0.25:
-            self.get_logger().info(
-                f'Gravity check OK: |a|={mag:.3f} m/s² ({err:+.3f} vs 9.807)')
+            self.get_logger().info(f"Gravity check OK: |a|={mag:.3f} m/s² ({err:+.3f} vs 9.807)")
         else:
             self.get_logger().warn(
-                f'Gravity check FAILED: |a|={mag:.3f} m/s² ({err:+.3f} vs 9.807, '
-                f'{err / _GRAVITY * 100:+.1f}%). '
-                f'Run scripts/calibrate_accel.py to (re)calibrate the accelerometer.')
+                f"Gravity check FAILED: |a|={mag:.3f} m/s² ({err:+.3f} vs 9.807, "
+                f"{err / _GRAVITY * 100:+.1f}%). "
+                f"Run scripts/calibrate_accel.py to (re)calibrate the accelerometer."
+            )
 
     def _timer_callback(self):
         try:
             ax_raw, ay_raw, az_raw, temp_raw, gx_raw, gy_raw, gz_raw = self._read_raw_data()
         except OSError as e:
-            self.get_logger().warn(f'I2C read error: {e}')
+            self.get_logger().warn(f"I2C read error: {e}")
             return
 
         now = self.get_clock().now().to_msg()
@@ -289,5 +286,5 @@ def main(args=None):
         rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -64,15 +64,15 @@ class ImuKalmanNode(Node):
     """
 
     def __init__(self):
-        super().__init__('imu_kalman')
+        super().__init__("imu_kalman")
 
-        self.declare_parameter('q_angle', 0.001)
-        self.declare_parameter('q_bias', 0.003)
-        self.declare_parameter('r_measure', 0.03)
+        self.declare_parameter("q_angle", 0.001)
+        self.declare_parameter("q_bias", 0.003)
+        self.declare_parameter("r_measure", 0.03)
 
-        q_angle = self.get_parameter('q_angle').value
-        q_bias = self.get_parameter('q_bias').value
-        r_measure = self.get_parameter('r_measure').value
+        q_angle = self.get_parameter("q_angle").value
+        q_bias = self.get_parameter("q_bias").value
+        r_measure = self.get_parameter("r_measure").value
 
         self._kf_roll = Kalman1D(q_angle, q_bias, r_measure)
         self._kf_pitch = Kalman1D(q_angle, q_bias, r_measure)
@@ -81,10 +81,10 @@ class ImuKalmanNode(Node):
         self._last_stamp = None
         self._initialized = False
 
-        self._sub = self.create_subscription(Imu, 'imu/data_raw', self._imu_callback, 10)
-        self._pub = self.create_publisher(Imu, 'imu/data', 10)
+        self._sub = self.create_subscription(Imu, "imu/data_raw", self._imu_callback, 10)
+        self._pub = self.create_publisher(Imu, "imu/data", 10)
 
-        self.get_logger().info('IMU Kalman filter running: imu/data_raw -> imu/data')
+        self.get_logger().info("IMU Kalman filter running: imu/data_raw -> imu/data")
 
     def _imu_callback(self, msg):
         ax = msg.linear_acceleration.x
@@ -164,5 +164,5 @@ def main(args=None):
         rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -10,7 +10,7 @@ robot_localization EKF — wheel odom + IMU 융합
     TF:  odom → base_link
 """
 
-import os
+from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -18,17 +18,13 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    ekf_config = os.path.join(
-        get_package_share_directory('rc_car_bringup'),
-        'config',
-        'ekf.yaml',
-    )
+    ekf_config = str(Path(get_package_share_directory("rc_car_bringup")) / "config" / "ekf.yaml")
 
     ekf_node = Node(
-        package='robot_localization',
-        executable='ekf_node',
-        name='ekf_filter_node',
-        output='screen',
+        package="robot_localization",
+        executable="ekf_node",
+        name="ekf_filter_node",
+        output="screen",
         parameters=[ekf_config],
     )
 
