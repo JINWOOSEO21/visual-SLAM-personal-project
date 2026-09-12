@@ -260,11 +260,30 @@ scale = 2g / (r_up - r_dn)
 
 ### 카메라 내부 파라미터
 
+카메라마다 따로 잡아야 한다. `camera:=` 로 고른다 (기본값 `csi`).
+
 ```bash
-ros2 launch intrinsic_calibration.launch.py
+ros2 launch intrinsic_calibration.launch.py                # CSI (imx219)
+ros2 launch intrinsic_calibration.launch.py camera:=usb    # USB 웹캠 (C270)
 ```
 
-7×5 체커보드(사각형 25 mm) 기준. 결과는 `~/.ros/camera_info/` 에 저장된다.
+7×5 체커보드(사각형 25 mm) 기준. 결과는 `~/.ros/camera_info/` 에 저장되며,
+파일명에 카메라 id 와 해상도가 들어가므로 두 카메라의 결과는 저절로 분리된다.
+
+| 카메라 | 포맷 | 결과 파일 |
+|---|---|---|
+| `csi` | RGB888 | `imx219__base_soc_i2c0mux_i2c_1_imx219_10_640x480.yaml` |
+| `usb` | YUYV | `C270HDWEBCAM__base_scb_pcie_..._046d_0825_640x480.yaml` |
+
+> 포맷이 다른 이유: C270 은 libcamera 기준 MJPEG/YUYV 만 지원하고 RGB888 을
+> 내보내지 못한다. CSI 와 같은 설정으로 띄우면 `unsupported pixel format
+> "RGB888"` 로 죽는다.
+
+> **USB 웹캠을 다른 포트에 꽂으면 id 가 바뀐다.** libcamera 가 붙이는 id 에 USB
+> 포트 경로(`usb@0,0-1.2`)가 들어 있고 `camera_ros` 는 완전히 같은 문자열만
+> 받는다. 그럴 때는 `camera_id:=<id>` 로 직접 넘기면 된다. 현재 id 목록은
+> `camera` 파라미터 없이 `camera_node` 를 띄우면 기동 로그의 `>> cameras:` 에
+> 나온다.
 
 > **카메라를 다시 장착하면 반드시 다시 잡아야 한다.** 카메라가 상하 반전 장착이라
 > 캘리브레이션 화면의 체커보드도 뒤집혀 보이는데, 그대로 진행하면 된다.
