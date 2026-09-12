@@ -39,7 +39,7 @@ PC 쪽에서 RTAB-Map으로 2D Visual SLAM을 돌린다.
 | 항목 | 사양 |
 |---|---|
 | 보드 | Raspberry Pi 4B 4GB, Ubuntu 22.04, ROS 2 Humble |
-| 카메라 | IMX219 (Arducam), CSI 연결, libcamera + 하드웨어 ISP |
+| 카메라 | IMX219 (Arducam), CSI 연결, libcamera + 하드웨어 ISP. **상하 반전 장착** → `orientation: 180` 으로 되돌림 |
 | IMU | MPU6050 (GY-521), I2C bus 1 @ `0x68` |
 | 모터 드라이버 | L298N |
 | 엔코더 | 단채널 광학 엔코더 ×2 (방향 정보 없음, 펄스만 카운트) |
@@ -265,6 +265,11 @@ ros2 launch intrinsic_calibration.launch.py
 ```
 
 7×5 체커보드(사각형 25 mm) 기준. 결과는 `~/.ros/camera_info/` 에 저장된다.
+
+> **카메라 방향을 바꾸면 반드시 다시 잡아야 한다.** `intrinsic_calibration.launch.py`
+> 의 `CAMERA_ORIENTATION` 은 `sensors.launch.py` 의 값과 같아야 한다. 두 값이
+> 어긋나면 principal point 가 틀어진 내부 파라미터가 경고 없이 그대로 쓰인다.
+> 현재 카메라는 상하 반전 장착이라 양쪽 모두 `180` 이다.
 
 ### 엔코더 / 하드웨어 점검
 
