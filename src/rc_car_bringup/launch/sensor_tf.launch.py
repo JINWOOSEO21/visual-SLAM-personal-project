@@ -3,7 +3,10 @@ Phase 4: 카메라-IMU 외부 캘리브레이션 (Static TF)
 
 TF 프레임 구조:
     base_link
-    ├── camera_link   (전방 카메라)
+    ├── camera_link   (전방 카메라 — CSI imx219)
+    │   └── camera        (optical frame)
+    ├── c270_link     (Logitech C270 USB 웹캠)
+    │   └── c270          (optical frame)
     └── imu_link      (MPU6050)
 
 좌표계 규칙 (REP-103):
@@ -12,6 +15,7 @@ TF 프레임 구조:
 실측값 (단위: 미터, base_link 원점 = 뒷바퀴 축 중심):
     imu_link:    전방 0.060m, 우측 0.065m(→ y=-0.065), 상방 0.023m
     camera_link: 전방 0.160m, 우측 0.005m(→ y=-0.005), 상방 0.053m
+    c270_link:   전방 0.185m, 좌측 0.002m(→ y=+0.002), 상방 0.076m
 
 camera_link 값은 IMU 기준 실측에서 유도했다.
 IMU 자체 축 기준으로 카메라는 (x=-0.06, y=+0.10, z=+0.03) 에 있고,
@@ -24,6 +28,21 @@ IMU 축은 아래 매핑을 따르므로 base_link 축으로는 (전방 0.10, �
 
 직접 잰 이전 값 (0.175, 0, 0.050) 과는 1.6cm 차이였고,
 IMU 기준 측정이 더 최근이라 이쪽을 채택했다.
+
+c270_link 도 같은 방식으로 유도했다. IMU 축 기준 실측 (-0.067, 0.125, 0.053):
+
+    R_z(-pi/2) @ (-0.067, 0.125, 0.053) = (0.125, 0.067, 0.053)
+    (0.060, -0.065, 0.023) + (0.125, 0.067, 0.053) = (0.185, 0.002, 0.076)
+
+같은 실측에서 CSI 카메라는 IMU 축 (0, 0.125, 0.05) 로 나왔고, 이는
+base_link 로 (0.185, -0.065, 0.073) 에 해당한다. 즉 두 카메라는 전방
+거리가 같고 y 로 0.067m(=6.7cm) 떨어진 나란한 배치다 — 나중에 스테레오로
+쓸 때의 baseline 이 된다.
+
+NOTE: 위 CSI 값은 아직 아래 base_to_camera 에 반영돼 있지 않다 (여전히
+0.160, -0.005, 0.053). 카메라 장착 방향 변경과 함께 별도로 갱신 중이라
+이 파일에서는 건드리지 않았다. 단안 SLAM 을 다시 돌리기 전에 반드시
+확인할 것.
 
 IMU 물리 장착 방향:
     IMU x축 → 로봇 우측(base_link -y)
@@ -109,6 +128,70 @@ def generate_launch_description():
         ],
     )
 
+    # base_link → c270_link  (Logitech C270 USB 웹캠)
+    #
+    # 아직 이 프레임을 쓰는 노드는 없다. C270 은 UVC 장치라 camera_ros(libcamera)
+    # 가 아니라 usb_cam 같은 별도 노드가 필요하고, 지금 단안 SLAM 은 CSI 카메라만
+    # 쓴다. 나중에 스테레오로 넘어갈 때 바로 쓸 수 있도록 외부 파라미터만 먼저
+    # 기록해 둔다. 구독자가 없으므로 단안 파이프라인 동작에는 영향이 없다.
+    #
+    # 좌표 유도는 파일 상단 docstring 참고 (IMU 축 실측 -0.067, 0.125, 0.053).
+    #
+    # 회전: CSI 쪽 base_to_camera 와 달리 roll=π 를 넣지 않는다. C270 은 뒤집지
+    # 않고 정방향으로 장착했다는 전제다. 실제로 뒤집어 달았다면 여기에도 roll=π
+    # 가 필요하다 — 스테레오를 켜기 전에 반드시 확인할 것.
+    base_to_c270 = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="base_to_c270_tf",
+        arguments=[
+            "--x",
+            "0.185",  # 전방 18.5cm
+            "--y",
+            "0.002",  # 좌측 0.2cm (거의 중심선)
+            "--z",
+            "0.076",  # 상방 7.6cm
+            "--roll",
+            "0.0",
+            "--pitch",
+            "0.0",
+            "--yaw",
+            "0.0",
+            "--frame-id",
+            "base_link",
+            "--child-frame-id",
+            "c270_link",
+        ],
+    )
+
+    # c270_link → c270 (optical frame)
+    # 규칙은 camera_to_optical 과 동일 (z 전방, x 우측, y 하방).
+    # child-frame-id 는 나중에 C270 을 띄우는 노드가 이미지 헤더에 박는
+    # frame_id 와 일치시켜야 한다 (usb_cam 이면 camera_frame_id 파라미터).
+    c270_to_optical = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="c270_to_optical_tf",
+        arguments=[
+            "--x",
+            "0.0",
+            "--y",
+            "0.0",
+            "--z",
+            "0.0",
+            "--roll",
+            "-1.5707963",  # -π/2
+            "--pitch",
+            "0.0",
+            "--yaw",
+            "-1.5707963",  # -π/2
+            "--frame-id",
+            "c270_link",
+            "--child-frame-id",
+            "c270",
+        ],
+    )
+
     # base_link → imu_link
     # IMU x→로봇우측(-y), y→로봇전방(+x), z→로봇상방(+z)  ∴ yaw=-π/2
     base_to_imu = Node(
@@ -139,6 +222,8 @@ def generate_launch_description():
         [
             base_to_camera,
             camera_to_optical,
+            base_to_c270,
+            c270_to_optical,
             base_to_imu,
         ]
     )
