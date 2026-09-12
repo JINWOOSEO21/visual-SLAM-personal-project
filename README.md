@@ -39,7 +39,7 @@ PC 쪽에서 RTAB-Map으로 2D Visual SLAM을 돌린다.
 | 항목 | 사양 |
 |---|---|
 | 보드 | Raspberry Pi 4B 4GB, Ubuntu 22.04, ROS 2 Humble |
-| 카메라 | IMX219 (Arducam), CSI 연결, libcamera + 하드웨어 ISP |
+| 카메라 | IMX219 (Arducam), CSI 연결, libcamera + 하드웨어 ISP. **상하 반전 장착** → TF `base_link→camera_link` 에 `roll=π` |
 | IMU | MPU6050 (GY-521), I2C bus 1 @ `0x68` |
 | 모터 드라이버 | L298N |
 | 엔코더 | 단채널 광학 엔코더 ×2 (방향 정보 없음, 펄스만 카운트) |
@@ -266,6 +266,14 @@ ros2 launch intrinsic_calibration.launch.py
 
 7×5 체커보드(사각형 25 mm) 기준. 결과는 `~/.ros/camera_info/` 에 저장된다.
 
+> **카메라를 다시 장착하면 반드시 다시 잡아야 한다.** 카메라가 상하 반전 장착이라
+> 캘리브레이션 화면의 체커보드도 뒤집혀 보이는데, 그대로 진행하면 된다.
+> `cameracalibrator` 는 체커보드 방향을 가리지 않고, 내부 파라미터는 실제로
+> 퍼블리시되는 이미지 기준으로 나와야 런타임과 일치한다.
+>
+> 반전 이전에 잡아둔 값은
+> `~/.ros/camera_info/*.yaml.pre-flip.bak` 으로 백업해 두었다.
+
 ### 엔코더 / 하드웨어 점검
 
 `~/hw_check/` 에 배선 점검용 스탠드얼론 스크립트가 있다 (저장소 밖).
@@ -297,6 +305,12 @@ python3 ~/hw_check/test_imu_motion.py       # IMU를 기울이며 축별 반응 
   `mpu6050_driver/imu_kalman_node` 다.
 - **`/dev/media*` 번호는 재부팅마다 바뀐다.** libcamera가 알아서 찾으므로 보통
   문제되지 않지만, `media-ctl` 을 직접 쓸 때는 `unicam` + `imx219` 문자열로 탐색해야 한다.
+- **USB 웹캠을 꽂으면 libcamera 카메라 인덱스가 밀린다.** libcamera는 UVC 웹캠도
+  함께 열거해서, 웹캠이 꽂힌 상태에서는 인덱스 0이 웹캠, 1이 imx219가 된다.
+  `camera_ros` 는 인덱스 0을 기본으로 고르므로 `camera` 파라미터를 비워두면
+  CSI 카메라 대신 웹캠이 열리고, 웹캠은 RGB888을 지원하지 않아
+  `unsupported pixel format "RGB888"` 로 노드가 죽는다. `sensors.launch.py` 는
+  device-tree 경로(`/base/soc/i2c0mux/i2c@1/imx219@10`)로 CSI 카메라를 고정한다.
 
 ## 트러블슈팅
 

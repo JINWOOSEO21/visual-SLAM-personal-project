@@ -38,7 +38,23 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     # base_link → camera_link
-    # 카메라가 전방(x)을 바라봄, 광학 프레임과 일치하도록 설정
+    # 카메라가 전방(x)을 바라보되, 광학축 기준으로 180° 뒤집어(상하 반전) 장착돼 있다.
+    #
+    # 반전을 이미지가 아니라 TF 로 처리하는 이유: camera_ros 의 `orientation`
+    # 파라미터는 libcamera >= 0.2 를 요구하는데 이 Pi 는 0.1.0 이라 무시된다
+    # ("parameter 'orientation' not supported on libcamera 0.1"). 이미지를 돌리는
+    # 별도 노드를 끼우면 Pi CPU 와 지연이 늘고 압축 단계도 한 번 더 타야 한다.
+    # TF 로 처리하면 비용이 0 이고 SLAM 기하는 정확하다. 대신 RViz 등에서 보이는
+    # 이미지는 뒤집힌 채로 남는다 (표시상의 문제일 뿐 특징점 매칭은 회전 불변이다).
+    #
+    # 반전을 여기(camera_link)에 넣고 아래 camera_link → camera 는 표준값 그대로
+    # 두는 편이 의미가 분명하다. "카메라 몸체가 뒤집혀 달렸다"는 사실은 장착의
+    # 속성이지 광학 프레임 규칙이 바뀐 게 아니기 때문이다.
+    #
+    # 검증 (base_link 기준 optical 축):
+    #   roll=0  → 이미지 오른쪽=우측(-y), 이미지 아래=하방(-z), 광축=전방(+x)
+    #   roll=pi → 이미지 오른쪽=좌측(+y), 이미지 아래=상방(+z), 광축=전방(+x)
+    # 즉 광축은 그대로 전방을 보고 상하좌우만 뒤집힌다.
     base_to_camera = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
@@ -51,7 +67,7 @@ def generate_launch_description():
             "--z",
             "0.053",  # 상방 5.3cm
             "--roll",
-            "0.0",
+            "3.1415927",  # π : 상하 반전 장착
             "--pitch",
             "0.0",
             "--yaw",
