@@ -58,20 +58,15 @@ def generate_launch_description():
     # 순서에 따라 바뀌지만, CSI 카메라의 id 는 device-tree 경로라 고정이다.
     CSI_CAMERA_ID = "/base/soc/i2c0mux/i2c@1/imx219@10"
 
-    # 카메라를 상하 반전(광학축 기준 180° 롤)해서 장착했으므로 libcamera 단계에서
-    # 되돌린다. 0/90/180/270 만 허용되는 read-only 파라미터라 런타임 변경은 안 된다.
+    # NOTE: 카메라는 상하 반전해서 장착돼 있지만 여기서 되돌리지 않는다.
+    # camera_ros 의 `orientation` 파라미터는 libcamera >= 0.2 를 요구하는데
+    # 이 Pi 는 ros-humble-libcamera 0.1.0 이라 설정해도 무시된다:
+    #   [WARN] parameter 'orientation' not supported on libcamera 0.1
+    # 대신 sensor_tf.launch.py 의 base_link -> camera_link 에 roll=pi 를 넣어
+    # 기하학적으로 처리한다. 자세한 근거는 그쪽 주석 참고.
     #
-    # 이미지를 여기서 바로 세우기 때문에 아래쪽 TF 체인
-    # (sensor_tf.launch.py 의 camera_link -> camera)은 손댈 필요가 없다. 대신
-    # TF 에 roll=π 를 넣어 해결하는 방법도 있지만, 그러면 rtabmap 이 뒤집힌
-    # 이미지를 받게 되고 카메라 캘리브레이션도 뒤집힌 상태로 떠야 해서
-    # 일관성을 맞추기가 더 번거롭다.
-    #
-    # 주의: 이 값은 intrinsic_calibration.launch.py 의 CAMERA_ORIENTATION 과
-    # 반드시 같아야 한다. 캘리브레이션을 이 값과 다른 방향으로 잡으면 principal
-    # point 가 어긋난 내부 파라미터가 조용히 쓰인다.
-    CAMERA_ORIENTATION = 180
-
+    # libcamera 를 0.2 이상으로 올리더라도 여기에 orientation 을 추가하면 안 된다.
+    # TF 와 이미지가 동시에 뒤집혀 이중 회전이 된다. 둘 중 하나만 써야 한다.
     camera_node = Node(
         package="camera_ros",
         executable="camera_node",
@@ -79,7 +74,6 @@ def generate_launch_description():
         parameters=[
             {
                 "camera": CSI_CAMERA_ID,
-                "orientation": CAMERA_ORIENTATION,
                 "width": 640,
                 "height": 480,
                 "format": "RGB888",
