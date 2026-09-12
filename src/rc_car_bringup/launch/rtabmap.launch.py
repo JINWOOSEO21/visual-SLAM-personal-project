@@ -113,6 +113,9 @@ def generate_launch_description():
         # (2 = Epipolar 는 3D 점 없이 돌지만 translation scale 을 못 구해
         #  그래프 최적화에 쓸 metric 제약이 안 나온다.)
         "Vis/EstimationType": "1",
+        # 이 값은 두 곳에서 쓰인다: (1) PnP 직전 게이트 — from 의 3D 단어 수와
+        # to 의 전체 단어 수가 각각 이 값 이상이어야 매칭이 시도되고,
+        # (2) 최종 RANSAC inlier 최소치. 즉 올리면 후보가 더 일찍 잘린다.
         # 우선 10 으로 두고 loop closure 가 잡히는지부터 확인한다. 잡히기
         # 시작하면 오탐(잘못된 링크는 맵을 크게 망가뜨린다)을 걸러내기 위해
         # 15~20 으로 올리는 것을 권장.
@@ -143,11 +146,36 @@ def generate_launch_description():
         # 지원하므로, 이 값을 false 로 내리지 않으면 StereoFromMotion 이
         # 조용히 무시된다. depth 이미지가 없으니 마스크로 쓸 것도 없다.
         "Mem/DepthAsMask": "false",
-        # 짧은 baseline(1Hz 주행 기준 수십 cm)으로 triangulate 한 먼 점은
-        # depth 오차가 급격히 커진다. 10m 초과는 버려 PnP 오염을 막는다.
-        "Vis/MaxDepth": "10.0",
-        # ── 검출/루프클로저 주기 (RPi 부담 ↓, PC 측이지만 보수적) ──
-        "Rtabmap/DetectionRate": "1.0",  # Hz
+        #
+        # NOTE: Vis/MaxDepth 는 의도적으로 설정하지 않는다 (기본값 0 = 비활성).
+        # 한때 "짧은 baseline 으로 triangulate 한 먼 점이 PnP 를 오염시킨다"는
+        # 이유로 10.0 을 줬지만, 이 파라미터는 PnP 단계가 아니라 그보다 훨씬
+        # 앞단인 *매칭 풀 구성* 단계에서 작동한다. RegistrationVis.cpp 가
+        # MinDepth/MaxDepth 중 하나라도 0 이 아니면 filterKeypointsByDepth() 로
+        # 양쪽 노드의 디스크립터 목록 자체를 잘라내기 때문이다.
+        #
+        # StereoFromMotion 의 3D 점은 "그 시점의 이동 방향에서 시차가 생긴
+        # 특징"만 골라낸 부분집합이라, 같은 장소를 두 번 지나도 두 방문의
+        # 부분집합은 서로 많이 다르다. 매칭을 그 부분집합으로 제한하면 이
+        # 불일치를 정면으로 맞게 된다.
+        #
+        # 실측 (2026-09-12 12:01, 172 노드, Vis/MaxDepth=10.0):
+        #   BoW 가설 (확률 > Rtabmap/LoopThr=0.11)   54 건
+        #     └ 매칭 단계 도달                          6 건  (48 건은 풀 미달로 탈락)
+        #        └ Visual_matches                      최대 8  (중앙값 3)
+        #           └ PnP inliers > 0                  0 건
+        #   예: 10->148 은 거리 0.80m / 시점차 7.2° 의 좋은 재방문인데
+        #       풀이 85 vs 97 로 잘려 matches=3 에 그쳤다.
+        #
+        # 비활성화하면 매칭이 노드당 ~500 개 특징 전체에서 일어나고, PnP 는
+        # 그중 from 쪽 3D 가 유효한 쌍만 자동으로 사용한다. 먼 점의 오염은
+        # RANSAC + Vis/PnPReprojError=2 가 걸러준다 — 그쪽이 올바른 위치다.
+        #
+        # ── 검출/루프클로저 주기 ──────────────────────────────────
+        # 1.0 -> 2.0 Hz. 키프레임이 촘촘해지면 프레임 간 회전이 줄어
+        # (실측 스텝 회전 중앙값 0.29 rad @1Hz) 재방문 시 삼각화된 점들의
+        # 교집합이 커진다. PC 측 처리 시간은 노드당 0.03~0.34s 라 여유 있다.
+        "Rtabmap/DetectionRate": "2.0",  # Hz
         "RGBD/NeighborLinkRefining": "true",
         "RGBD/ProximityBySpace": "false",
         "RGBD/AngularUpdate": "0.05",  # rad
