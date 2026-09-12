@@ -93,9 +93,13 @@ def generate_launch_description():
         "database_path": database_path,
         "Mem/IncrementalMemory": "true",
         "Mem/InitWMWithAllNodes": "false",
-        # feature=0 인 노드를 루프클로저 후보에서 제외 (old=0 reject 방지)
+        # NOTE: 아래 두 파라미터는 "LTM 이동 중 데이터가 소실돼 old=0 이 된다"는
+        # 가설로 추가했지만, old=0 의 원인이 아니었다. DB 확인 결과 41번 노드는
+        # 키포인트 487 개를 온전히 갖고 있었고 3D 좌표만 NULL 이었다 (게다가
+        # Rtabmap/TimeThr=0 이라 LTM 이동 자체가 일어나지 않는다).
+        # 실제 원인과 처방은 아래 Mem/StereoFromMotion 주석 참고.
+        # 두 값 자체는 무해하고 LTM 운용 시 여전히 유효하므로 유지한다.
         "Mem/BadSignaturesIgnored": "true",
-        # feature descriptor 를 LTM 이동 후에도 보존 (old=0 근본 원인 차단)
         "Mem/BinDataKept": "true",
         # ── 평면 주행 (2D SLAM) ─────────────────────────────────
         "Reg/Force3DoF": "true",
@@ -105,25 +109,55 @@ def generate_launch_description():
         "Optimizer/Strategy": "1",  # 1 = g2o (중력 제약 지원)
         "RGBD/OptimizeFromGraphEnd": "false",
         # ── 단안 모드 (스케일은 wheel odom 으로 해결) ────────────
-        "Vis/EstimationType": "1",  # 1 = PnP (단안에 적합)
-        "Vis/MinInliers": "10",  # 15→10: 루프클로저 검증 허용 폭 확대
+        # 1 = PnP. Mem/StereoFromMotion 이 3D 점을 만들어주므로 성립한다.
+        # (2 = Epipolar 는 3D 점 없이 돌지만 translation scale 을 못 구해
+        #  그래프 최적화에 쓸 metric 제약이 안 나온다.)
+        "Vis/EstimationType": "1",
+        # 우선 10 으로 두고 loop closure 가 잡히는지부터 확인한다. 잡히기
+        # 시작하면 오탐(잘못된 링크는 맵을 크게 망가뜨린다)을 걸러내기 위해
+        # 15~20 으로 올리는 것을 권장.
+        "Vis/MinInliers": "10",
         "Vis/InlierDistance": "0.1",
         "Vis/MaxFeatures": "600",
-        # ORB 과 동일 feature type 으로 맞춰 Mem/UseOdomFeatures 불일치 해소
-        "Vis/FeatureType": "8",  # 8 = ORB
-        # ── 단안 depth 추정 (Occupancy Grid 생성용) ──────────────
-        # monocular triangulation 으로 sparse depth map 생성
-        "gen_depth": True,
-        "gen_depth_decimation": 4,  # 연산 부하 감소
+        # Kp/DetectorStrategy 와 같은 값으로 맞춰 Mem/UseOdomFeatures 불일치 해소
+        "Vis/FeatureType": "8",  # 8 = GFTT/ORB
+        # ── 단안 3D 점 생성 (loop closure 의 전제 조건) ──────────
+        # gen_depth 는 monocular triangulation 이 아니다. "scan_cloud 를 카메라
+        # 평면에 투영해 depth 이미지를 만드는" 기능(gen_scan 의 역방향)이라
+        # subscribe_scan_cloud=False 인 이 구성에서는 입력이 없어 무동작이다.
+        #
+        # 실측 (2026-09-12, ~/.ros/rtabmap.db 90 노드):
+        #   depth blob 을 가진 노드            0 / 90
+        #   3D 좌표를 가진 특징점              0 / 45,840
+        #   Link type 1/2 (loop closure)       0 개  (type 0 neighbor 만 58 개)
+        # Vis/EstimationType=1(PnP) 은 old 노드의 3D 점 + new 노드의 2D 점을
+        # 필요로 하므로, 3D 점이 0 이면 모든 후보가 old=0 으로 기각된다
+        # ("Rejected loop closure 41 -> 60: Not enough features (old=0, new=504)").
+        "gen_depth": False,
+        # 단안에서 3D 점을 얻는 경로: 연속 프레임 사이의 odom 이동량을
+        # baseline 삼아 특징점을 triangulate 한다 (stereo from motion).
+        "Mem/StereoFromMotion": "true",
+        # 위 설정의 필수 동반 옵션. rtabmap 문서: "It would be ignored if
+        # Mem/DepthAsMask is true and the feature detector used supports
+        # masking." 아래 Kp/DetectorStrategy=8 은 GFTT 계열이라 masking 을
+        # 지원하므로, 이 값을 false 로 내리지 않으면 StereoFromMotion 이
+        # 조용히 무시된다. depth 이미지가 없으니 마스크로 쓸 것도 없다.
+        "Mem/DepthAsMask": "false",
+        # 짧은 baseline(1Hz 주행 기준 수십 cm)으로 triangulate 한 먼 점은
+        # depth 오차가 급격히 커진다. 10m 초과는 버려 PnP 오염을 막는다.
+        "Vis/MaxDepth": "10.0",
         # ── 검출/루프클로저 주기 (RPi 부담 ↓, PC 측이지만 보수적) ──
         "Rtabmap/DetectionRate": "1.0",  # Hz
         "RGBD/NeighborLinkRefining": "true",
         "RGBD/ProximityBySpace": "false",
         "RGBD/AngularUpdate": "0.05",  # rad
         "RGBD/LinearUpdate": "0.05",  # m
-        # ── 특징점: ORB 명시 (xfeatures2d 없는 환경에서 BRIEF 대체) ──
+        # ── 특징점 (xfeatures2d 없는 환경에서 BRIEF 대체) ────────
         "Kp/MaxFeatures": "400",
-        "Kp/DetectorStrategy": "8",  # 8 = ORB (BRIEF 대신 명시)
+        # 8 = GFTT/ORB (ORB 단독은 2). GFTT 균등 검출 + ORB 디스크립터 조합이라
+        # 이대로 두면 되지만, GFTT 가 masking 을 지원하는 검출기라는 점 때문에
+        # 위 Mem/DepthAsMask=false 가 반드시 같이 필요하다.
+        "Kp/DetectorStrategy": "8",
     }
 
     # 토픽 remapping
