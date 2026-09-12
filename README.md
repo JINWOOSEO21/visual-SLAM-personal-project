@@ -297,6 +297,12 @@ python3 ~/hw_check/test_imu_motion.py       # IMU를 기울이며 축별 반응 
   `mpu6050_driver/imu_kalman_node` 다.
 - **`/dev/media*` 번호는 재부팅마다 바뀐다.** libcamera가 알아서 찾으므로 보통
   문제되지 않지만, `media-ctl` 을 직접 쓸 때는 `unicam` + `imx219` 문자열로 탐색해야 한다.
+- **USB 웹캠을 꽂으면 libcamera 카메라 인덱스가 밀린다.** libcamera는 UVC 웹캠도
+  함께 열거해서, 웹캠이 꽂힌 상태에서는 인덱스 0이 웹캠, 1이 imx219가 된다.
+  `camera_ros` 는 인덱스 0을 기본으로 고르므로 `camera` 파라미터를 비워두면
+  CSI 카메라 대신 웹캠이 열리고, 웹캠은 RGB888을 지원하지 않아
+  `unsupported pixel format "RGB888"` 로 노드가 죽는다. `sensors.launch.py` 는
+  device-tree 경로(`/base/soc/i2c0mux/i2c@1/imx219@10`)로 CSI 카메라를 고정한다.
 
 ## 트러블슈팅
 

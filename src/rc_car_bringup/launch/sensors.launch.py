@@ -45,12 +45,26 @@ def generate_launch_description():
     )
 
     # 카메라 노드 (camera_ros)
+    #
+    # camera 파라미터를 반드시 명시한다. camera_ros 는 libcamera 가 찾은 카메라 중
+    # 인덱스 0 을 기본으로 고르는데, USB 웹캠(UVC)도 libcamera 가 함께 열거하므로
+    # 웹캠이 꽂혀 있으면 0 번이 웹캠이 되어버린다. 실측 (C270 연결 상태):
+    #   0: C270 HD WEBCAM (...046d:0825)
+    #   1: imx219 (/base/soc/i2c0mux/i2c@1/imx219@10)
+    # 이 상태로 camera 를 비워두면 웹캠이 선택되고, C270 은 MJPEG/YUYV 만 내므로
+    # 아래 format="RGB888" 에서 `unsupported pixel format "RGB888"` 로 노드가 죽는다.
+    #
+    # 인덱스 대신 id 문자열로 고정하는 이유: 인덱스 순서는 USB 장치의 유무/열거
+    # 순서에 따라 바뀌지만, CSI 카메라의 id 는 device-tree 경로라 고정이다.
+    CSI_CAMERA_ID = "/base/soc/i2c0mux/i2c@1/imx219@10"
+
     camera_node = Node(
         package="camera_ros",
         executable="camera_node",
         name="camera",
         parameters=[
             {
+                "camera": CSI_CAMERA_ID,
                 "width": 640,
                 "height": 480,
                 "format": "RGB888",
