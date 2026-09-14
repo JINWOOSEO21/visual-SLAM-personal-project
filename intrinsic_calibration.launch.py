@@ -28,10 +28,17 @@ RMW_IMPLEMENTATION=rmw_cyclonedds_cpp, ROS_LOCALHOST_ONLY=0.
 mode:=calibrator 쪽은 camera/camera_id/format 인자를 쓰지 않는다. GUI 는 어느
 카메라가 열렸는지 모르고 토픽만 구독하므로, 카메라 선택은 Pi 쪽에서만 하면 된다.
 
-결과는 **카메라 노드가 아니라 GUI 를 띄운 기기**의 `~/.ros/camera_info/` 에
-저장된다 (cameracalibrator 가 SetCameraInfo 서비스를 호출하는 게 아니라 직접
-파일로 쓰기 때문). 분리 실행했다면 PC 에 저장되므로 Pi 로 옮겨야 런타임에
-쓰인다. 저장 경로에 카메라 id 와 해상도가 들어가 두 카메라의 결과 파일은
+GUI 의 두 버튼은 저장 위치가 다르다 (camera_calibration 3.0.9 소스 확인):
+
+    COMMIT -> do_upload() 이 set_camera_info 서비스를 호출한다. 파일을 쓰는 건
+              GUI 가 아니라 **카메라 드라이버**이므로 결과 yaml 은 camera_ros 가
+              도는 **Pi** 의 ~/.ros/camera_info/ 에 저장된다. 분리 실행해도
+              복사할 필요가 없다 — 이게 우리가 원하는 동작이다.
+    SAVE   -> do_save() 가 **GUI 를 띄운 기기**(PC)의
+              /tmp/calibrationdata.tar.gz 로 원본 이미지까지 묶어 저장한다.
+              재계산용 백업이지 런타임이 읽는 파일이 아니다.
+
+저장 경로에 카메라 id 와 해상도가 들어가 두 카메라의 결과 파일은
 저절로 분리된다. 덮어쓸 걱정은 없다:
     CSI : imx219__base_soc_i2c0mux_i2c_1_imx219_10_640x480.yaml
     USB : C270HDWEBCAM__base_scb_pcie_..._046d_0825_640x480.yaml
@@ -128,6 +135,20 @@ def _camera_node(context):
 def _calibration_node():
     # OpenCV(GTK3) 창을 띄우므로 디스플레이가 있는 기기에서만 살아남는다.
     # 헤드리스에서 실행하면 exit code -11 (SIGSEGV) 로 죽는다.
+    #
+    # PYTHONNOUSERSITE 를 주는 이유: PC 의 ~/.local 에 pip 로 설치된
+    # opencv_python_headless 4.13.0.92 가 있는데, user site 가
+    # /usr/lib/python3/dist-packages 보다 sys.path 우선순위가 높아서
+    # cameracalibrator(shebang /usr/bin/python3)가 그 headless 빌드를 집는다.
+    # 이름 그대로 GUI 가 빠진 빌드라 창을 만들 때 죽는다:
+    #
+    #   cv2.error: ... The function is not implemented.
+    #   Rebuild the library with Windows, GTK+ 2.x or Cocoa support.
+    #
+    # 이 값을 1 로 두면 ~/.local 을 건너뛰고 apt 로 깔린 python3-opencv 4.5.4
+    # (GUI: GTK3) 를 쓴다. 실측으로 창 생성과 camera_calibration import 둘 다
+    # 확인했다. pip 쪽 opencv 를 지우지 않는 이유는 다른 작업이 그걸 쓸 수
+    # 있어서다 — 이 노드만 국소적으로 피해 가는 편이 안전하다.
     return Node(
         package="camera_calibration",
         executable="cameracalibrator",
@@ -142,6 +163,7 @@ def _calibration_node():
             ("image", "/camera_node/image_raw"),
             ("camera", "/camera_node"),
         ],
+        additional_env={"PYTHONNOUSERSITE": "1"},
         output="screen",
     )
 
