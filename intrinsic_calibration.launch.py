@@ -161,7 +161,24 @@ def _calibration_node():
         ],
         remappings=[
             ("image", "/camera_node/image_raw"),
-            ("camera", "/camera_node"),
+            # COMMIT 버튼이 호출하는 서비스. 이름을 직접 맞춰줘야 한다.
+            #
+            # cameracalibrator 는 클라이언트를 상대 이름 "camera/set_camera_info"
+            # 로 만들고(camera_calibrator.py:100), camera_ros 는 서버를 상대 이름
+            # "set_camera_info" 로 만든다. 둘 다 네임스페이스가 "/" 라 각각
+            # /camera/set_camera_info 와 /set_camera_info 로 풀려 어긋난다.
+            # 실측 (ros2 node info /camera_node):
+            #     Service Servers:  /set_camera_info
+            #
+            # 이름이 어긋나면 COMMIT 이 존재하지 않는 서비스에 동기 .call() 을
+            # 걸고 영원히 블록된다. GUI 스레드에서 호출되므로 창이 굳고, 기다려도
+            # 절대 풀리지 않는다.
+            #
+            # 시작 로그의 "Waiting for service ... OK" 는 이 문제를 전혀
+            # 걸러주지 못한다. wait_for_service(timeout_sec=5) 의 반환값을 보지
+            # 않고 예외만 잡은 뒤 무조건 "OK" 를 찍기 때문이다
+            # (camera_calibrator.py:109-120). 서비스가 없어도 OK 가 나온다.
+            ("camera/set_camera_info", "/set_camera_info"),
         ],
         additional_env={"PYTHONNOUSERSITE": "1"},
         output="screen",
