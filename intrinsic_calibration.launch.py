@@ -98,7 +98,7 @@ def launch_setup(context, *_args, **_kwargs):
     if mode in ("both", "camera"):
         nodes.append(_camera_node(context))
     if mode in ("both", "calibrator"):
-        nodes.append(_calibration_node())
+        nodes.append(_calibration_node(context))
 
     return nodes
 
@@ -132,7 +132,19 @@ def _camera_node(context):
     )
 
 
-def _calibration_node():
+def _calibration_node(context):
+    # 접선 왜곡(p1, p2)을 0 으로 고정할지. CSI 를 세 번 연속 잡아본 실측에서
+    # p2 가 -0.0159 -> +0.0060 -> +0.0083 으로 부호까지 바뀌었다. 정상적인
+    # 렌즈라면 1e-3 수준이고 시행 간에 안정적이어야 하는데, 한 자릿수 크고
+    # 흔들린다는 건 접선 왜곡이 데이터로 구속되지 않아 과적합되고 있다는 뜻이다.
+    # 같은 세 시행에서 cx 도 275.7 -> 342.1 -> 352.3 으로 흔들렸다 (fx 와 k1 은
+    # 수렴했다). 자유도를 둘 줄이면 남은 파라미터가 더 잘 잡힐 것으로 본다.
+    #
+    # 끄고 비교하려면 zero_tangent_dist:=false.
+    extra_args = []
+    if LaunchConfiguration("zero_tangent_dist").perform(context).lower() in ("true", "1"):
+        extra_args.append("--zero-tangent-dist")
+
     # OpenCV(GTK3) 창을 띄우므로 디스플레이가 있는 기기에서만 살아남는다.
     # 헤드리스에서 실행하면 exit code -11 (SIGSEGV) 로 죽는다.
     #
@@ -158,6 +170,7 @@ def _calibration_node():
             BOARD_SIZE,
             "--square",
             SQUARE_SIZE,
+            *extra_args,
         ],
         remappings=[
             ("image", "/camera_node/image_raw"),
@@ -196,6 +209,15 @@ def generate_launch_description():
                     "both = 카메라+GUI 한 기기에서 (Pi 에 모니터가 있을 때), "
                     "camera = 카메라 노드만 (헤드리스 Pi), "
                     "calibrator = GUI 만 (PC)"
+                ),
+            ),
+            DeclareLaunchArgument(
+                "zero_tangent_dist",
+                default_value="true",
+                choices=["true", "false"],
+                description=(
+                    "접선 왜곡 p1, p2 를 0 으로 고정 (mode 가 both/calibrator 일 때만 의미 있음). "
+                    "실측에서 p2 부호가 시행마다 뒤집혀 기본값을 true 로 둔다."
                 ),
             ),
             DeclareLaunchArgument(
