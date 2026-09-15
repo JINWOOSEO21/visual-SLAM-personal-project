@@ -71,6 +71,27 @@ def generate_launch_description():
     # 돌리면 principal point 가 (W-1-cx, H-1-cy) 로 바뀌어 캘리브레이션을 다시
     # 잡아야 하고, 회전 노드를 끼우면 Pi CPU 와 지연도 는다. 무엇보다 TF 와
     # 이미지를 동시에 뒤집으면 이중 회전이 된다 — 둘 중 하나만 써야 한다.
+    # 해상도는 FOV 를 좌우한다. IMX219 는 저해상도를 만드는 방법이 둘인데
+    # 결과가 전혀 다르다 (데이터시트 5-2 Pixel Binning Mode):
+    #
+    #   "Binning read-out can be used to obtain an image of lower resolution
+    #    for full field of view."
+    #
+    #   binning  : 인접 2x2 픽셀을 평균, 배열 전체(3280x2464)를 읽음 -> FOV 유지
+    #   cropping : x_addr/y_addr 로 읽는 창 자체를 좁힘            -> FOV 축소
+    #
+    # 640x480 을 요청하면 libcamera 가 crop 모드를 고른다. 실측: 캘리브레이션에서
+    # 나온 수평 FOV 가 27.7도였고, crop 창이 센서 폭의 약 39%(1280/3280)라고 보면
+    # 2*atan(0.39*tan(31도)) = 26.4도로 계산과 맞는다. 렌즈 문제가 아니었다.
+    #
+    # 820x616 은 full-FOV 비닝 모드(1640x1232)의 정확히 1/2 이라 그 모드가 선택되고
+    # ISP 가 다운스케일한다. FOV 가 27.7도에서 약 62도로 넓어진다. 원본
+    # 1640x1232 를 그대로 쓰지 않는 이유는 RGB888 기준 프레임이 6MB 라
+    # DDS 전송이 실패했기 때문이다 (실측: 25초 안에 한 장도 못 받음).
+    #
+    # NOTE: 해상도를 바꾸면 내부 파라미터가 무효가 된다. camera_info 파일명에도
+    # 해상도가 들어가므로(..._820x616.yaml) 반드시 다시 캘리브레이션할 것.
+    # intrinsic_calibration.launch.py 의 IMAGE_WIDTH/HEIGHT 와 같은 값이어야 한다.
     camera_node = Node(
         package="camera_ros",
         executable="camera_node",
@@ -78,8 +99,8 @@ def generate_launch_description():
         parameters=[
             {
                 "camera": CSI_CAMERA_ID,
-                "width": 640,
-                "height": 480,
+                "width": 820,
+                "height": 616,
                 "format": "RGB888",
             }
         ],

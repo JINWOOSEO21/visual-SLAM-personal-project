@@ -172,14 +172,29 @@ def generate_launch_description():
         # RANSAC + Vis/PnPReprojError=2 가 걸러준다 — 그쪽이 올바른 위치다.
         #
         # ── 검출/루프클로저 주기 ──────────────────────────────────
-        # 1.0 -> 2.0 Hz. 키프레임이 촘촘해지면 프레임 간 회전이 줄어
-        # (실측 스텝 회전 중앙값 0.29 rad @1Hz) 재방문 시 삼각화된 점들의
-        # 교집합이 커진다. PC 측 처리 시간은 노드당 0.03~0.34s 라 여유 있다.
-        "Rtabmap/DetectionRate": "2.0",  # Hz
+        # 2.0 -> 1.0 Hz 로 되돌린다. 한때 "키프레임을 촘촘히 해서 프레임 간
+        # 회전을 줄이자"는 이유로 2.0 을 줬는데 역효과였다. 키프레임 간격을
+        # 절반으로 줄이면 Mem/StereoFromMotion 이 삼각화에 쓰는 baseline 도
+        # 절반이 되고, 삼각화는 baseline 이 클수록 유리하다.
+        #
+        # 실측 (2026-09-15, 148 노드 @2Hz): 노드당 3D 점 중앙값이 8(1Hz) 에서
+        # 6 으로 떨어졌고 Visual_matches 최대값도 8 에서 3 으로 내려갔다.
+        "Rtabmap/DetectionRate": "1.0",  # Hz
         "RGBD/NeighborLinkRefining": "true",
         "RGBD/ProximityBySpace": "false",
         "RGBD/AngularUpdate": "0.05",  # rad
-        "RGBD/LinearUpdate": "0.05",  # m
+        # 0.05 -> 0.15 m. 5cm 만 움직여도 노드가 추가되는데, 그런 노드는
+        # baseline 이 없어 3D 점을 만들지 못한다. 같은 실측에서 스텝 병진
+        # 중앙값이 1.1cm 였고 147 스텝 중 109 개가 5cm 미만이었다. 직전 스텝
+        # 병진과 삼각화된 3D 점 수의 관계는 뚜렷하다:
+        #
+        #     < 0.05m : 노드 109 개, 3D 중앙값  5
+        #   0.05-0.15m: 노드  18 개, 3D 중앙값 22
+        #   >= 0.30m  : 노드   3 개, 3D 중앙값 52
+        #
+        # 문턱을 올리면 의미 있게 움직였을 때만 노드가 생겨 baseline 이 확보되고,
+        # 노드 수가 줄어 처리도 가벼워진다.
+        "RGBD/LinearUpdate": "0.15",  # m
         # ── 특징점 (xfeatures2d 없는 환경에서 BRIEF 대체) ────────
         "Kp/MaxFeatures": "400",
         # 8 = GFTT/ORB (ORB 단독은 2). GFTT 균등 검출 + ORB 디스크립터 조합이라

@@ -76,8 +76,16 @@ CAMERA_PRESETS = {
 
 # 캘리브레이션은 런타임과 같은 해상도로 잡아야 내부 파라미터가 유효하다.
 # sensors.launch.py 의 width/height 와 맞춰 둔 값이므로 한쪽만 바꾸지 말 것.
-IMAGE_WIDTH = 640
-IMAGE_HEIGHT = 480
+#
+# 820x616 인 이유는 sensors.launch.py 주석 참고. 요약하면 IMX219 가 640x480 은
+# 센서 crop 으로, 1640x1232 는 full-FOV 비닝으로 내보내는데 820x616 은 후자의
+# 1/2 이라 FOV 가 27.7도에서 약 62도로 넓어진다.
+#
+# USB(C270)는 UVC 라 이 사정과 무관하지만, 같은 해상도로 맞춰 두면 두 카메라의
+# 캘리브레이션 조건이 같아져 비교가 쉽다. C270 이 820x616 을 지원하지 않으면
+# libcamera 가 가장 가까운 크기로 조정하며 기동 로그에 그 사실을 남긴다.
+IMAGE_WIDTH = 820
+IMAGE_HEIGHT = 616
 
 BOARD_SIZE = "7x5"  # 내부 코너 개수
 SQUARE_SIZE = "0.025"  # m

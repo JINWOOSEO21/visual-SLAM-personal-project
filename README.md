@@ -273,8 +273,8 @@ ros2 launch intrinsic_calibration.launch.py camera:=usb    # USB 웹캠 (C270)
 
 | 카메라 | 포맷 | 결과 파일 |
 |---|---|---|
-| `csi` | RGB888 | `imx219__base_soc_i2c0mux_i2c_1_imx219_10_640x480.yaml` |
-| `usb` | YUYV | `C270HDWEBCAM__base_scb_pcie_..._046d_0825_640x480.yaml` |
+| `csi` | RGB888 | `imx219__base_soc_i2c0mux_i2c_1_imx219_10_820x616.yaml` |
+| `usb` | YUYV | `C270HDWEBCAM__base_scb_pcie_..._046d_0825_820x616.yaml` |
 
 > 포맷이 다른 이유: C270 은 libcamera 기준 MJPEG/YUYV 만 지원하고 RGB888 을
 > 내보내지 못한다. CSI 와 같은 설정으로 띄우면 `unsupported pixel format
@@ -344,7 +344,7 @@ i2cdetect -y 1        # 0x68 이 보여야 정상
 **카메라가 안 잡힘**
 ```bash
 ros2 run camera_ros camera_node   # 로그에 imx219 가 나오는지 확인
-ros2 topic hz /camera/image_raw   # 640x480 RGB888 에서 약 23 Hz
+ros2 topic hz /camera/image_raw   # 820x616 RGB888
 ```
 `cam -l` (libcamera CLI)은 이 환경에서 세그폴트한다. ROS 노드 경로는 정상이니 무시해도 된다.
 
