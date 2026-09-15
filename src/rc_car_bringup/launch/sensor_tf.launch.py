@@ -57,23 +57,29 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     # base_link → camera_link
-    # 카메라가 전방(x)을 바라보되, 광학축 기준으로 180° 뒤집어(상하 반전) 장착돼 있다.
+    # CSI 카메라는 전방(x)을 바라보며 정방향으로 장착돼 있다. roll = 0.
     #
-    # 반전을 이미지가 아니라 TF 로 처리하는 이유: camera_ros 의 `orientation`
-    # 파라미터는 libcamera >= 0.2 를 요구하는데 이 Pi 는 0.1.0 이라 무시된다
-    # ("parameter 'orientation' not supported on libcamera 0.1"). 이미지를 돌리는
-    # 별도 노드를 끼우면 Pi CPU 와 지연이 늘고 압축 단계도 한 번 더 타야 한다.
-    # TF 로 처리하면 비용이 0 이고 SLAM 기하는 정확하다. 대신 RViz 등에서 보이는
-    # 이미지는 뒤집힌 채로 남는다 (표시상의 문제일 뿐 특징점 매칭은 회전 불변이다).
+    # 한동안 roll=pi 가 들어가 있었다. 카메라를 뒤집어 달았던 시절의 값인데,
+    # 그 뒤 장착이 바뀌어 지금은 이미지가 똑바로 나온다. 실측 (2026-09-15,
+    # /csi_cam/image_raw 에서 받은 프레임): 사람 머리가 위, 침대가 아래로
+    # 정방향이다. 같은 날 C270 프레임은 180도 뒤집혀 나왔고, 두 이미지를
+    # 회전시켜가며 상관계수를 재면 서로 180도 관계다.
     #
-    # 반전을 여기(camera_link)에 넣고 아래 camera_link → camera 는 표준값 그대로
-    # 두는 편이 의미가 분명하다. "카메라 몸체가 뒤집혀 달렸다"는 사실은 장착의
-    # 속성이지 광학 프레임 규칙이 바뀐 게 아니기 때문이다.
+    # TF 의 roll 은 "이미지를 돌리는 설정"이 아니라 "카메라 몸체가 어떻게
+    # 달렸는지"를 기술하는 값이다. 정방향 이미지에 roll=pi 를 남겨두면 TF 가
+    # 거짓을 말하게 되고, 삼각화된 3D 점의 상하좌우가 통째로 뒤집힌다:
     #
-    # 검증 (base_link 기준 optical 축):
-    #   roll=0  → 이미지 오른쪽=우측(-y), 이미지 아래=하방(-z), 광축=전방(+x)
-    #   roll=pi → 이미지 오른쪽=좌측(+y), 이미지 아래=상방(+z), 광축=전방(+x)
-    # 즉 광축은 그대로 전방을 보고 상하좌우만 뒤집힌다.
+    #   roll=0  → 이미지 아래에 보이는 점이 base_link 에서 아래(-z)  ← 정방향 카메라
+    #   roll=pi → 이미지 아래에 보이는 점이 base_link 에서 위 (+z)   ← 뒤집힌 카메라
+    #
+    # 정방향이 된 지금은 roll=0 이 맞다. 이미지 자체는 건드리지 않으므로
+    # 캘리브레이션(intrinsics)은 그대로 유효하다.
+    #
+    # 뒤집힌 장착으로 되돌릴 일이 생기면 roll 을 pi 로 되돌리면 된다. 이미지를
+    # 소프트웨어로 회전시키는 방식은 쓰지 않는다 — camera_ros 의 orientation 은
+    # libcamera >= 0.2 를 요구하는데 이 Pi 는 0.1.0 이고, 별도 회전 노드는 Pi
+    # CPU 와 지연을 늘리며 무엇보다 principal point 가 (W-1-cx, H-1-cy) 로
+    # 바뀌어 캘리브레이션을 다시 잡아야 한다.
     base_to_camera = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
@@ -86,7 +92,7 @@ def generate_launch_description():
             "--z",
             "0.053",  # 상방 5.3cm
             "--roll",
-            "3.1415927",  # π : 상하 반전 장착
+            "0.0",  # 정방향 장착
             "--pitch",
             "0.0",
             "--yaw",

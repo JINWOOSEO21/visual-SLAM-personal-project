@@ -58,15 +58,19 @@ def generate_launch_description():
     # 순서에 따라 바뀌지만, CSI 카메라의 id 는 device-tree 경로라 고정이다.
     CSI_CAMERA_ID = "/base/soc/i2c0mux/i2c@1/imx219@10"
 
-    # NOTE: 카메라는 상하 반전해서 장착돼 있지만 여기서 되돌리지 않는다.
-    # camera_ros 의 `orientation` 파라미터는 libcamera >= 0.2 를 요구하는데
-    # 이 Pi 는 ros-humble-libcamera 0.1.0 이라 설정해도 무시된다:
-    #   [WARN] parameter 'orientation' not supported on libcamera 0.1
-    # 대신 sensor_tf.launch.py 의 base_link -> camera_link 에 roll=pi 를 넣어
-    # 기하학적으로 처리한다. 자세한 근거는 그쪽 주석 참고.
+    # NOTE: CSI 카메라는 정방향으로 장착돼 있다 (2026-09-15 실측: 퍼블리시된
+    # 프레임이 똑바로 나온다). 그래서 sensor_tf.launch.py 의
+    # base_link -> camera_link 도 roll=0 이다.
     #
-    # libcamera 를 0.2 이상으로 올리더라도 여기에 orientation 을 추가하면 안 된다.
-    # TF 와 이미지가 동시에 뒤집혀 이중 회전이 된다. 둘 중 하나만 써야 한다.
+    # 여기에 이미지 회전을 넣지 않는다. camera_ros 의 `orientation` 파라미터는
+    # libcamera >= 0.2 를 요구하는데 이 Pi 는 ros-humble-libcamera 0.1.0 이라
+    # 설정해도 무시된다:
+    #   [WARN] parameter 'orientation' not supported on libcamera 0.1
+    #
+    # 나중에 카메라를 뒤집어 달더라도 회전은 TF 쪽 roll 로 처리한다. 이미지를
+    # 돌리면 principal point 가 (W-1-cx, H-1-cy) 로 바뀌어 캘리브레이션을 다시
+    # 잡아야 하고, 회전 노드를 끼우면 Pi CPU 와 지연도 는다. 무엇보다 TF 와
+    # 이미지를 동시에 뒤집으면 이중 회전이 된다 — 둘 중 하나만 써야 한다.
     camera_node = Node(
         package="camera_ros",
         executable="camera_node",

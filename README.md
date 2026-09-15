@@ -39,7 +39,8 @@ PC 쪽에서 RTAB-Map으로 2D Visual SLAM을 돌린다.
 | 항목 | 사양 |
 |---|---|
 | 보드 | Raspberry Pi 4B 4GB, Ubuntu 22.04, ROS 2 Humble |
-| 카메라 | IMX219 (Arducam), CSI 연결, libcamera + 하드웨어 ISP. **상하 반전 장착** → TF `base_link→camera_link` 에 `roll=π` |
+| 카메라 | IMX219 (Arducam), CSI 연결, libcamera + 하드웨어 ISP. **정방향 장착** → TF `base_link→camera_link` 는 `roll=0` |
+| 카메라 (보조) | Logitech C270, USB(UVC). **상하 반전 장착** → TF `base_link→c270_link` 에 `roll=π`. 아직 구독하는 노드 없음 |
 | IMU | MPU6050 (GY-521), I2C bus 1 @ `0x68` |
 | 모터 드라이버 | L298N |
 | 엔코더 | 단채널 광학 엔코더 ×2 (방향 정보 없음, 펄스만 카운트) |
@@ -285,13 +286,15 @@ ros2 launch intrinsic_calibration.launch.py camera:=usb    # USB 웹캠 (C270)
 > `camera` 파라미터 없이 `camera_node` 를 띄우면 기동 로그의 `>> cameras:` 에
 > 나온다.
 
-> **카메라를 다시 장착하면 반드시 다시 잡아야 한다.** 카메라가 상하 반전 장착이라
-> 캘리브레이션 화면의 체커보드도 뒤집혀 보이는데, 그대로 진행하면 된다.
-> `cameracalibrator` 는 체커보드 방향을 가리지 않고, 내부 파라미터는 실제로
-> 퍼블리시되는 이미지 기준으로 나와야 런타임과 일치한다.
+> **카메라를 다시 장착하면 반드시 다시 잡아야 한다.** 장착이 바뀌면 TF 의 `roll`
+> 도 같이 맞춰야 한다 (정방향이면 0, 상하 반전이면 π).
 >
-> 반전 이전에 잡아둔 값은
-> `~/.ros/camera_info/*.yaml.pre-flip.bak` 으로 백업해 두었다.
+> 화면에 보이는 대로 진행하면 된다. C270 처럼 반전 장착이라 체커보드가 뒤집혀
+> 보여도 그대로 잡는다 — `cameracalibrator` 는 체커보드 방향을 가리지 않고,
+> 내부 파라미터는 실제로 퍼블리시되는 이미지 기준으로 나와야 런타임과 일치한다.
+> 이미지를 돌려서 잡으면 principal point 가 `(W-1-cx, H-1-cy)` 로 어긋난다.
+>
+> 이전 값들은 `~/.ros/camera_info/*.yaml.*.bak` 으로 백업해 두었다.
 
 ### 엔코더 / 하드웨어 점검
 
