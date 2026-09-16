@@ -92,6 +92,27 @@ def generate_launch_description():
     # NOTE: 해상도를 바꾸면 내부 파라미터가 무효가 된다. camera_info 파일명에도
     # 해상도가 들어가므로(..._820x616.yaml) 반드시 다시 캘리브레이션할 것.
     # intrinsic_calibration.launch.py 의 IMAGE_WIDTH/HEIGHT 와 같은 값이어야 한다.
+    # 프레임률과 JPEG 품질은 Wi-Fi 대역폭 때문에 낮춰 잡는다.
+    #
+    # 실측 (2026-09-16): 2.4GHz 채널 6, 링크 72.2 Mbit/s 로 협상돼 있지만 실효
+    # 처리량은 2.3 MB/s(=18 Mbit/s)뿐이다. 기본값(30 Hz, quality 80)이면 카메라만
+    # 1.1 MB/s 를 먹어 가용 대역의 절반을 차지했고, 남은 절반을 TF·odometry·
+    # camera_info·cmd_vel 이 나눠 쓰다가 TF 가 1~3 초씩 밀렸다. rtabmap 로그의
+    # delay 가 1.4~3.4 초, "Did not receive data since 5 seconds" 반복이 그 증상이다.
+    # (Pi CPU 는 34%, 클럭 동기 오차 ~5ms, ping 손실 0% 로 모두 정상이었다.)
+    #
+    # 5 Hz 로 낮춰도 SLAM 품질은 손해가 없다. rtabmap 의 Rtabmap/DetectionRate 가
+    # 1.0 Hz 라 초당 1 장만 쓰고 나머지는 버리기 때문이다. 30 장을 보내 29 장을
+    # 버리느니 5 장만 보내는 편이 낫다.
+    #
+    # FrameDurationLimits 는 libcamera 컨트롤로 [최소, 최대] 프레임 간격(us)이다.
+    # 200000 us = 0.2 s = 5 Hz. 실측으로 30.0 Hz -> 4.99 Hz 로 떨어지는 것을 확인했다.
+    # jpeg_quality 는 image_transport 의 compressed 플러그인 설정이다.
+    #
+    # 둘을 합쳐 대역폭이 1.10 MB/s -> 0.15 MB/s 로 약 7 배 줄었다 (실측).
+    FRAME_DURATION_US = 200000  # 5 Hz
+    JPEG_QUALITY = 50
+
     camera_node = Node(
         package="camera_ros",
         executable="camera_node",
@@ -102,6 +123,8 @@ def generate_launch_description():
                 "width": 820,
                 "height": 616,
                 "format": "RGB888",
+                "FrameDurationLimits": [FRAME_DURATION_US, FRAME_DURATION_US],
+                "jpeg_quality": JPEG_QUALITY,
             }
         ],
         output="screen",
