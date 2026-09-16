@@ -122,6 +122,33 @@ def generate_launch_description():
         "Vis/MinInliers": "10",
         "Vis/InlierDistance": "0.1",
         "Vis/MaxFeatures": "600",
+        # ── PnP 를 단안 삼각화 점의 정확도에 맞춰 완화 ──────────────
+        # 실측 (2026-09-16, 288 노드 / 87.8 m): 주행을 고치자 Visual_matches 가
+        # 최대 6 -> 20 으로 올라 MinInliers=10 을 넘긴 쌍이 9 개 나왔는데,
+        # RANSAC inlier 는 47 건 전부 0 이었다. 대응점 개수가 아니라 정확도가
+        # 병목이라는 뜻이다.
+        #
+        # 기본값 2 px 은 RGB-D 나 스테레오처럼 깊이가 정확할 때의 값이다.
+        # Mem/StereoFromMotion 의 3D 점은 odometry 를 baseline 으로 삼아
+        # 삼각화하므로 휠 슬립과 IMU 드리프트가 그대로 좌표 오차가 된다.
+        # 2 px 로는 맞는 대응점까지 outlier 로 버려진다.
+        "Vis/PnPReprojError": "5",
+        # 0 = Iterative, 1 = EPNP, 2 = P3P.
+        # Iterative 는 초기 추정에서 출발해 반복 정련하는데, 전역 loop closure
+        # 에는 guess 가 없어 항등행렬에서 시작한다. 실제 상대 자세의 회전이
+        # 크면 수렴하지 못한다. EPNP 는 비반복 해석해라 초기값에 의존하지 않는다.
+        "Vis/PnPFlags": "1",
+        #
+        # NOTE: Vis/MinDepth 로 코앞에 뭉친 점(깊이 0.2 m 미만이 667 개, 15%)을
+        # 걸러내려 했으나 쓰지 않는다. RegistrationVis.cpp:930 의 조건이
+        #
+        #     getMinDepth() > 0.0f || getMaxDepth() > 0.0f
+        #
+        # 이라 MinDepth 만 켜도 filterKeypointsByDepth() 가 되살아난다. 그러면
+        # 매칭 풀이 다시 3D 보유 특징(노드당 중앙값 7 개)으로 쪼그라들어,
+        # Vis/MaxDepth 를 없애 Visual_matches 를 6 -> 20 으로 올린 성과가
+        # 그대로 사라진다. 코앞 점은 아래 PnPReprojError 완화와 RANSAC 에
+        # 맡기는 편이 낫다.
         # Kp/DetectorStrategy 와 같은 값으로 맞춰 Mem/UseOdomFeatures 불일치 해소
         "Vis/FeatureType": "8",  # 8 = GFTT/ORB
         # ── 단안 3D 점 생성 (loop closure 의 전제 조건) ──────────
