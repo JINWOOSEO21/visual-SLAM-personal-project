@@ -13,20 +13,59 @@
 하나를 별도 터미널에서 선택 실행 — 둘 다 같은 GPIO 핀을 쓰므로 동시 실행 금지).
 
 사용법:
-    ros2 launch rc_car_bringup sensors.launch.py
+    ros2 launch rc_car_bringup sensors.launch.py                  # slam:=rtabmap (기본)
+    ros2 launch rc_car_bringup sensors.launch.py slam:=orbslam3   # 카메라 15 Hz / q80
+
     # 그 다음 별도 터미널에서:
     ros2 launch pid_velocity_controller pid_controller.launch.py   # closed-loop
     # 또는
     ros2 launch motor_controller motor.launch.py                   # open-loop
+
+slam 인자는 PC 의 slam.launch.py 와 같은 값으로 맞춘다. Pi 쪽에서 달라지는
+것은 카메라 프레임률과 JPEG 품질뿐이다 (CAMERA_PROFILES 참고).
 """
 
 from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
+# SLAM 백엔드별 카메라 설정: (FrameDurationLimits [us], jpeg_quality)
+# 근거는 generate_launch_description() 의 카메라 주석 참고.
+CAMERA_PROFILES = {
+    # RTAB-Map 은 Rtabmap/DetectionRate=1 Hz 라 초당 1 장만 쓴다.
+    "rtabmap": (200000, 50),  # 5 Hz
+    # ORB-SLAM3 는 프레임 간 연속 추적이 전제라 프레임률이 곧 추적 안정성이다.
+    # JPEG 50 의 블록 노이즈는 FAST 코너를 망가뜨리므로 품질도 올린다.
+    # 대역폭은 5 Hz / q50(0.15 MB/s) 보다 크게 늘어나니 실측해서 조정할 것.
+    "orbslam3": (66666, 80),  # 15 Hz
+}
+
+
+def _camera_node(context, camera_id):
+    frame_duration_us, jpeg_quality = CAMERA_PROFILES[LaunchConfiguration("slam").perform(context)]
+    return [
+        Node(
+            package="camera_ros",
+            executable="camera_node",
+            name="camera",
+            parameters=[
+                {
+                    "camera": camera_id,
+                    "width": 820,
+                    "height": 616,
+                    "format": "RGB888",
+                    "FrameDurationLimits": [frame_duration_us, frame_duration_us],
+                    "jpeg_quality": jpeg_quality,
+                }
+            ],
+            output="screen",
+        )
+    ]
 
 
 def generate_launch_description():
@@ -101,34 +140,18 @@ def generate_launch_description():
     # delay 가 1.4~3.4 초, "Did not receive data since 5 seconds" 반복이 그 증상이다.
     # (Pi CPU 는 34%, 클럭 동기 오차 ~5ms, ping 손실 0% 로 모두 정상이었다.)
     #
-    # 5 Hz 로 낮춰도 SLAM 품질은 손해가 없다. rtabmap 의 Rtabmap/DetectionRate 가
+    # 5 Hz 로 낮춰도 RTAB-Map 품질은 손해가 없다. rtabmap 의 Rtabmap/DetectionRate 가
     # 1.0 Hz 라 초당 1 장만 쓰고 나머지는 버리기 때문이다. 30 장을 보내 29 장을
-    # 버리느니 5 장만 보내는 편이 낫다.
+    # 버리느니 5 장만 보내는 편이 낫다. ORB-SLAM3 는 사정이 달라 별도 프로파일을
+    # 쓴다 (CAMERA_PROFILES).
     #
     # FrameDurationLimits 는 libcamera 컨트롤로 [최소, 최대] 프레임 간격(us)이다.
     # 200000 us = 0.2 s = 5 Hz. 실측으로 30.0 Hz -> 4.99 Hz 로 떨어지는 것을 확인했다.
     # jpeg_quality 는 image_transport 의 compressed 플러그인 설정이다.
     #
     # 둘을 합쳐 대역폭이 1.10 MB/s -> 0.15 MB/s 로 약 7 배 줄었다 (실측).
-    FRAME_DURATION_US = 200000  # 5 Hz
-    JPEG_QUALITY = 50
-
-    camera_node = Node(
-        package="camera_ros",
-        executable="camera_node",
-        name="camera",
-        parameters=[
-            {
-                "camera": CSI_CAMERA_ID,
-                "width": 820,
-                "height": 616,
-                "format": "RGB888",
-                "FrameDurationLimits": [FRAME_DURATION_US, FRAME_DURATION_US],
-                "jpeg_quality": JPEG_QUALITY,
-            }
-        ],
-        output="screen",
-    )
+    # 둘을 백엔드별로 고른 값은 파일 상단 CAMERA_PROFILES 에 있다.
+    camera_node = OpaqueFunction(function=_camera_node, args=[CSI_CAMERA_ID])
 
     # 휠 오도메트리 (encoder + odometry)
     # publish_tf=False — TF는 EKF가 broadcast함
@@ -149,6 +172,12 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                "slam",
+                default_value="rtabmap",
+                choices=list(CAMERA_PROFILES),
+                description="PC 에서 돌릴 SLAM 백엔드 — 카메라 프레임률/JPEG 품질을 고른다",
+            ),
             imu_launch,
             tf_launch,
             camera_node,

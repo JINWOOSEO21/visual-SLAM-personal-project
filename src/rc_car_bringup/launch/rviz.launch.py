@@ -1,7 +1,7 @@
 """
-RViz2 로 RTAB-Map SLAM 상태를 실시간으로 보는 launch (PC 측 실행)
+RViz2 로 SLAM 상태를 실시간으로 보는 launch (PC 측 실행)
 
-rtabmap.launch.py 와 별개로 띄운다. RViz 만 껐다 켜도 SLAM 은 계속 돌기 때문에,
+slam.launch.py 와 별개로 띄울 수 있다. RViz 만 껐다 켜도 SLAM 은 계속 돌기 때문에,
 같은 launch 에 묶는 것보다 이쪽이 실사용에 편하다.
 
 표시되는 것:
