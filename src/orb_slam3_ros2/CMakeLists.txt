@@ -28,15 +28,17 @@ if(NOT EXISTS "${ORB_SLAM3_LIB}")
   return()
 endif()
 
-# ORB-SLAM3 는 Release 에서 -march=native 로 빌드된다 (ORB_SLAM3/CMakeLists.txt:13).
-# 플래그가 다르면 Eigen 고정 크기 타입의 정렬(EIGEN_MAX_ALIGN_BYTES)이 라이브러리와
-# 어긋나 실행 중 크래시가 날 수 있으므로 똑같이 맞춘다.
+# -march=native 는 쓰지 않는다. ORB-SLAM3/g2o/DBoW2 를 -march=native 로 빌드하면
+# Ubuntu 22.04 에서 첫 맵 초기화 직후 "double free or corruption (out)" 으로 죽는다
+# (Eigen 정렬이 32 바이트로 올라가 C++11 라이브러리와 C++17 래퍼 사이 new/delete 가 어긋남).
+# 그래서 ORB_SLAM3, Thirdparty/g2o, Thirdparty/DBoW2 의 CMakeLists 에서도 플래그를 지우고
+# 빌드해야 하며, 래퍼도 같은 기본 정렬(16 바이트)로 맞춘다.
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_compile_options(-O3 -march=native)
+add_compile_options(-O3)
 
 # PC 셸에서는 conda 환경(miniforge3/envs/rc_car)이 켜져 있어 python3 가 그쪽을 가리킨다.
 # 그 환경엔 catkin_pkg 가 없어 ament_package() 가 package.xml 을 못 읽고 실패한다.
