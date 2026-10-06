@@ -1,30 +1,39 @@
 """
-RTAB-Map 백엔드 (PC 측 실행) — 단독으로 띄우지 말고 slam.launch.py 를 통해 띄운다.
+RTAB-Map Monocular Visual SLAM launch (PC 측 실행)
 
-    ros2 launch rc_car_bringup slam.launch.py slam:=rtabmap
-
-공통 입력(이미지 decompress, RViz)은 slam_inputs.launch.py / slam.launch.py 가
-맡는다. 여기에는 RTAB-Map 에만 해당하는 노드만 둔다.
-
-입력 토픽:
-    /camera/image_decompressed    (slam_inputs.launch.py 가 republish)
+입력 토픽 (Pi 에서 Wi-Fi 로 수신):
+    /camera/image_raw/compressed  (sensor_msgs/CompressedImage, 30fps)
     /camera/camera_info           (sensor_msgs/CameraInfo)
-    /odometry/filtered            (nav_msgs/Odometry, Pi 의 EKF 출력)
+    /odometry/filtered            (nav_msgs/Odometry, EKF 출력)
+    /imu/data                     (sensor_msgs/Imu, imu_kalman_node — orientation 포함)
+
+Wi-Fi 대역폭 이슈로 raw 이미지는 17fps 까지 떨어지므로 compressed 를
+PC 측에서 수신 → image_transport/republish 로 decompress → rtabmap 입력.
 
 출력 (노드 네임스페이스가 없으므로 토픽은 전부 루트에 있다):
     /mapData, /cloud_map, /map, /mapGraph, /mapPath, /info
-    TF map → odom   ← 모든 SLAM 백엔드가 지켜야 하는 출력 계약
+    TF map → odom
 
-인자:
-    rtabmap_viz    RTAB-Map 자체 GUI 도 같이 띄운다
-    database_path  맵 DB 경로
+이 launch 하나로 decompress + SLAM + 뷰어가 같이 뜬다.
+
+사용법 (PC):
+    ros2 launch rc_car_bringup rtabmap.launch.py
+
+    # 뷰어 선택 (기본은 RViz2 만)
+    ros2 launch rc_car_bringup rtabmap.launch.py rviz:=false          # 뷰어 없이
+    ros2 launch rc_car_bringup rtabmap.launch.py rtabmap_viz:=true    # RTAB-Map GUI 도 같이
+
+RViz 만 따로 껐다 켜고 싶으면 rviz:=false 로 띄운 뒤
+별도 터미널에서 `ros2 launch rc_car_bringup rviz.launch.py` 를 쓰면 된다.
 """
 
 from pathlib import Path
 
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -33,7 +42,10 @@ def generate_launch_description():
 
     use_sim_time = LaunchConfiguration("use_sim_time")
     rtabmap_viz = LaunchConfiguration("rtabmap_viz")
+    rviz = LaunchConfiguration("rviz")
     database_path = LaunchConfiguration("database_path")
+
+    bringup_dir = Path(get_package_share_directory("rc_car_bringup"))
 
     default_db_path = str(Path("~/.ros/rtabmap.db").expanduser())
 
@@ -227,6 +239,20 @@ def generate_launch_description():
         ("odom", "/odometry/filtered"),
     ]
 
+    # Wi-Fi 대역폭 절감: Pi 가 보내는 /camera/image_raw/compressed 를
+    # PC 측에서 republish 로 풀어 /camera/image_decompressed 로 재발행
+    image_republish_node = Node(
+        package="image_transport",
+        executable="republish",
+        name="camera_image_republish",
+        arguments=["compressed", "raw"],
+        remappings=[
+            ("in/compressed", "/camera/image_raw/compressed"),
+            ("out", "/camera/image_decompressed"),
+        ],
+        output="screen",
+    )
+
     rtabmap_node = Node(
         package="rtabmap_slam",
         executable="rtabmap",
@@ -262,9 +288,21 @@ def generate_launch_description():
         condition=IfCondition(rtabmap_viz),
     )
 
+    # RViz2 (config/slam.rviz). rviz.launch.py 를 그대로 재사용해서
+    # 설정 경로가 두 군데로 갈라지지 않게 한다.
+    rviz_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(str(bringup_dir / "launch" / "rviz.launch.py")),
+        condition=IfCondition(rviz),
+    )
+
     return LaunchDescription(
         [
             DeclareLaunchArgument("use_sim_time", default_value="false"),
+            DeclareLaunchArgument(
+                "rviz",
+                default_value="true",
+                description="RViz2 를 같이 띄운다 (config/slam.rviz)",
+            ),
             DeclareLaunchArgument(
                 "rtabmap_viz",
                 default_value="false",
@@ -275,7 +313,9 @@ def generate_launch_description():
                 default_value=default_db_path,
                 description="RTAB-Map database file path",
             ),
+            image_republish_node,
             rtabmap_node,
             rtabmap_viz_node,
+            rviz_launch,
         ]
     )

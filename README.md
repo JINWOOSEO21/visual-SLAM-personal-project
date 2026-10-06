@@ -114,11 +114,8 @@ MPU6050을 I2C로 직접 읽어 IMU 데이터를 퍼블리시한다.
 | `sensors.launch.py` | Pi | 카메라 + IMU + 엔코더/오도메트리 + static TF + EKF (모터 제외) |
 | `ekf.launch.py` | Pi | `robot_localization` EKF 단독 |
 | `sensor_tf.launch.py` | Pi | `base_link` → `camera_link` / `camera` / `imu_link` static TF |
-| `slam.launch.py` | **PC** | SLAM 진입점: 공통 입력 + `slam:=rtabmap\|orbslam3` 백엔드 + RViz2 |
-| `slam_inputs.launch.py` | **PC** | 백엔드 공통 입력 (이미지 decompress). `slam.launch.py` 가 포함 |
-| `slam_rtabmap.launch.py` | **PC** | RTAB-Map 백엔드. `slam.launch.py` 가 포함 |
-| `slam_orbslam3.launch.py` | **PC** | ORB-SLAM3 백엔드. `orb_slam3_ros2` 패키지가 필요 (아직 없음) |
-| `rviz.launch.py` | **PC** | RViz2 단독 (`slam.launch.py` 가 내부적으로 포함) |
+| `rtabmap.launch.py` | **PC** | 이미지 decompress + RTAB-Map + RViz2 (한 번에) |
+| `rviz.launch.py` | **PC** | RViz2 단독 (rtabmap.launch.py 가 내부적으로 포함) |
 | `teleop.launch.py` | 아무데나 | `teleop_twist_keyboard` |
 
 ## 빌드
@@ -148,12 +145,8 @@ Python: `RPi.GPIO`, `smbus`, `PyYAML`
 ### 1. Pi — 센서 스택
 
 ```bash
-ros2 launch rc_car_bringup sensors.launch.py                  # slam:=rtabmap (기본, 카메라 5 Hz / q50)
-ros2 launch rc_car_bringup sensors.launch.py slam:=orbslam3   # 카메라 15 Hz / q80
+ros2 launch rc_car_bringup sensors.launch.py
 ```
-
-`slam` 인자는 PC 쪽 `slam.launch.py` 와 같은 값으로 맞춘다. Pi 에서 달라지는 것은
-카메라 프레임률과 JPEG 품질뿐이다 (`sensors.launch.py` 의 `CAMERA_PROFILES`).
 
 ### 2. Pi — 모터 제어 (별도 터미널, 둘 중 하나만)
 
@@ -166,50 +159,27 @@ ros2 launch motor_controller motor.launch.py                   # open-loop
 ### 3. PC — SLAM + 시각화
 
 ```bash
-ros2 launch rc_car_bringup slam.launch.py                  # slam:=rtabmap (기본)
-ros2 launch rc_car_bringup slam.launch.py slam:=orbslam3
+ros2 launch rc_car_bringup rtabmap.launch.py
 ```
 
-이 하나로 공통 입력(이미지 decompress) + 선택한 SLAM 백엔드 + RViz2 가 같이 뜬다.
-
-```
-Pi: 센서 + EKF ──▶ /camera/image_raw/compressed, /odometry/filtered, TF odom→base_link
-                          │
-PC: slam_inputs ──▶ /camera/image_decompressed
-                          │
-    slam_<백엔드> ──▶ TF map→odom        ← 모든 백엔드의 공통 출력
-```
-
-백엔드는 `odom→base_link`(EKF)를 건드리지 않고 `map→odom` 만 발행한다.
-두 백엔드를 동시에 띄우면 이 TF 가 충돌하므로, 비교는 같은 rosbag 을 백엔드별로
-재생해서 한다 (`use_sim_time:=true` + `ros2 bag play <bag> --clock`).
+이 하나로 이미지 decompress + RTAB-Map + RViz2 가 같이 뜬다.
 
 | 인자 | 기본 | 설명 |
 |---|---|---|
-| `slam` | `rtabmap` | SLAM 백엔드 (`rtabmap` / `orbslam3`) |
 | `rviz` | `true` | RViz2 (`config/slam.rviz`) |
-| `use_sim_time` | `false` | rosbag 재생 시 `true` |
-| `rtabmap_viz` | `false` | (rtabmap) RTAB-Map 자체 GUI — 켜면 창이 2개가 된다 |
-| `database_path` | `~/.ros/rtabmap.db` | (rtabmap) 맵 DB 경로 |
-| `mode` | `slam` | (orbslam3) `slam` / `localization` |
-| `vocabulary` | `~/.ros/orbslam3/ORBvoc.txt` | (orbslam3) BoW vocabulary |
-| `settings_path` | `~/.ros/orbslam3/imx219_820x616.yaml` | (orbslam3) 카메라/ORB 설정 |
-| `atlas_path` | `~/.ros/orbslam3/atlas` | (orbslam3) Atlas 저장/불러오기 경로 |
+| `rtabmap_viz` | `false` | RTAB-Map 자체 GUI — 켜면 창이 2개가 된다 |
+| `database_path` | `~/.ros/rtabmap.db` | 맵 DB 경로 |
 
 ```bash
-ros2 launch rc_car_bringup slam.launch.py rviz:=false          # 뷰어 없이 (헤드리스)
-ros2 launch rc_car_bringup slam.launch.py rtabmap_viz:=true    # 특징점/루프클로저 내부까지
+ros2 launch rc_car_bringup rtabmap.launch.py rviz:=false          # 뷰어 없이 (헤드리스)
+ros2 launch rc_car_bringup rtabmap.launch.py rtabmap_viz:=true    # 특징점/루프클로저 내부까지
 ```
-
-> `slam:=orbslam3` 는 ORB-SLAM3 래퍼 패키지 `orb_slam3_ros2` 가 빌드돼 있어야 한다.
-> 아직 없으므로 지금은 그 사실을 출력하고 종료한다. 래퍼가 지켜야 할 토픽/노드
-> 인터페이스는 `slam_orbslam3.launch.py` 상단에 정리돼 있다.
 
 `rtabmap_viz` 는 특징점 매칭과 루프 클로저 후보 이미지 쌍을 보여주므로
 SLAM 이 왜 안 붙는지 디버깅할 때 켠다. 평소에는 RViz 만으로 충분하다.
 
 Wi-Fi 대역폭 때문에 raw 이미지는 17 fps까지 떨어져서, Pi는 compressed만 보내고
-PC가 `image_transport/republish` 로 풀어서 SLAM 백엔드에 넣는다.
+PC가 `image_transport/republish` 로 풀어서 RTAB-Map에 넣는다.
 
 ### 4. RViz2 에 보이는 것
 
@@ -235,7 +205,7 @@ Fixed Frame 은 `map` 이다. 첫 키프레임이 등록되기 전에는
 `No transform from [odom] to [map]` 경고가 뜨는데 정상이다.
 
 > 다른 설정 파일을 쓰려면 `rviz_config:=/경로/my.rviz` 로 넘긴다.
-> 이 인자는 `slam.launch.py` 에서도 그대로 받는다.
+> 이 인자는 `rtabmap.launch.py` 에서도 그대로 받는다.
 
 ### 5. 조종
 
