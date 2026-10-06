@@ -54,6 +54,23 @@ std::string expand(const std::string & path)
 constexpr int kNotInitialized = ORB_SLAM3::Tracking::NOT_INITIALIZED;
 constexpr int kOk = ORB_SLAM3::Tracking::OK;
 
+// 15 Hz 에서 프레임 3 장 이상이 빠지면 누락으로 본다.
+constexpr double kFrameGapWarn = 0.2;
+
+const char * state_name(int state)
+{
+  switch (state) {
+    case ORB_SLAM3::Tracking::SYSTEM_NOT_READY: return "SYSTEM_NOT_READY";
+    case ORB_SLAM3::Tracking::NO_IMAGES_YET: return "NO_IMAGES_YET";
+    case ORB_SLAM3::Tracking::NOT_INITIALIZED: return "NOT_INITIALIZED";
+    case ORB_SLAM3::Tracking::OK: return "OK";
+    case ORB_SLAM3::Tracking::RECENTLY_LOST: return "RECENTLY_LOST";
+    case ORB_SLAM3::Tracking::LOST: return "LOST";
+    case ORB_SLAM3::Tracking::OK_KLT: return "OK_KLT";
+    default: return "UNKNOWN";
+  }
+}
+
 }  // namespace
 
 class MonoNode : public rclcpp::Node
@@ -177,8 +194,35 @@ private:
     const double stamp = rclcpp::Time(msg->header.stamp).seconds();
 
     std::lock_guard<std::mutex> lock(slam_mutex_);
+    // 직전 프레임과의 간격. 뒤로 가면 ORB-SLAM3 가 맵을 버리고 새로 만들고,
+    // 크게 벌어지면 (Wi-Fi 누락) 프레임 사이 움직임이 커져 추적을 잃기 쉽다.
+    const double gap = last_stamp_ > 0.0 ? stamp - last_stamp_ : 0.0;
+    last_stamp_ = stamp;
+    if (gap < 0.0) {
+      RCLCPP_WARN(get_logger(), "타임스탬프가 %.0f ms 뒤로 갔다 — ORB-SLAM3 가 새 맵을 만든다", -gap * 1000.0);
+    } else if (gap > kFrameGapWarn) {
+      ++frame_gaps_;
+      RCLCPP_WARN(
+        get_logger(), "프레임 간격 %.0f ms (누락 의심, 누적 %d 회)", gap * 1000.0, frame_gaps_);
+    }
+
     const Sophus::SE3f Tcw = slam_->TrackMonocular(gray->image, stamp);
     const int state = slam_->GetTrackingState();
+
+    // 추적 상태가 바뀔 때마다 남긴다. 맵이 자주 새로 만들어질 때 그 직전에 추적 점이
+    // 줄어들었는지(텍스처 부족, 급회전), 프레임이 빠졌는지를 로그만으로 가릴 수 있게 한다.
+    if (state != prev_state_) {
+      RCLCPP_INFO(
+        get_logger(), "추적 상태 %s -> %s (직전 OK 프레임 추적 점 %d 개, 프레임 간격 %.0f ms)",
+        state_name(prev_state_), state_name(state), last_tracked_points_, gap * 1000.0);
+    }
+    if (state == kOk) {
+      int tracked = 0;
+      for (const auto * mp : slam_->GetTrackedMapPoints()) {
+        tracked += mp != nullptr;
+      }
+      last_tracked_points_ = tracked;
+    }
 
     // 새 맵 초기화 = NOT_INITIALIZED -> OK. 추적을 잃고 새 맵을 만들 때마다 일어나며,
     // 그때마다 월드 프레임과 스케일이 바뀐다. scale_aligner 가 이 번호로 재정렬한다.
@@ -293,6 +337,9 @@ private:
   int prev_state_{ORB_SLAM3::Tracking::NO_IMAGES_YET};
   int epoch_{0};
   int big_changes_{0};
+  double last_stamp_{0.0};
+  int frame_gaps_{0};
+  int last_tracked_points_{0};
   std::unordered_map<unsigned long, Eigen::Vector3f> cloud_;
 
   rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub_;

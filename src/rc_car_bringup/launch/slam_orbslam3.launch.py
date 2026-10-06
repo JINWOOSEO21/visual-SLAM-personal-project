@@ -72,7 +72,10 @@ def _launch_nodes(context):
         package="orb_slam3_ros2",
         executable="mono_node",
         name="orb_slam3",
-        output="screen",
+        # ORB-SLAM3 의 진단 출력 (New Map created, Loop detected, Merge detected,
+        # Fail to track local map 등)은 ROS 로거가 아닌 stdout 으로 나온다.
+        # 실행 후 분석할 수 있도록 화면과 함께 launch 로그 디렉터리에도 남긴다.
+        output="both",
         parameters=[
             {
                 "use_sim_time": use_sim_time,
