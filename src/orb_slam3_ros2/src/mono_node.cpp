@@ -5,7 +5,7 @@
 //                                 T_world_cam, 스케일 없음. tracking 이 OK 일 때만 발행.
 //        /orb_slam3/state         std_msgs/Int32MultiArray
 //                                 [0] tracking 상태 (ORB_SLAM3::Tracking::eTrackingState)
-//                                 [1] 맵 epoch — 새 맵이 초기화될 때마다 1 씩 증가
+//                                 [1] 맵 epoch — 새 맵 초기화 / 맵 병합 때마다 1 씩 증가
 //                                 [2] 큰 맵 변경 횟수 — loop closure / 맵 병합 / GBA 누적
 //        /orb_slam3/map_points    sensor_msgs/PointCloud2, frame "orb_world", 스케일 없음
 // 서비스 ~/save_map               std_srvs/Trigger — ORB-SLAM3 를 종료하면서 Atlas 저장
@@ -224,12 +224,32 @@ private:
       last_tracked_points_ = tracked;
     }
 
-    // 새 맵 초기화 = NOT_INITIALIZED -> OK. 추적을 잃고 새 맵을 만들 때마다 일어나며,
-    // 그때마다 월드 프레임과 스케일이 바뀐다. scale_aligner 가 이 번호로 재정렬한다.
-    if (prev_state_ == kNotInitialized && state == kOk) {
-      ++epoch_;
-      cloud_.clear();
-      RCLCPP_INFO(get_logger(), "새 맵 초기화 (epoch %d)", epoch_);
+    // 월드 프레임과 스케일이 바뀌는 두 경우에 epoch 를 올린다. scale_aligner 가 이 번호로
+    // 재정렬한다.
+    //   새 맵 초기화 = NOT_INITIALIZED -> OK. 추적을 잃고 새 맵을 만들 때마다 일어난다.
+    //   맵 교체     = 추적 중에 현재 맵이 다른 맵으로 바뀐다. 맵 병합(예전 맵으로 합쳐짐)과
+    //                 localization 모드에서 Atlas 의 다른 맵으로 재위치 추정한 경우다. 이후
+    //                 포즈는 그 맵의 좌표계와 스케일로 나온다.
+    // 맵 교체 판정은 Map 포인터로 한다. 병합하면 예전 맵이 현재 맵의 id 를 물려받아
+    // (LoopClosing::MergeLocal 의 ChangeId) id 는 그대로다.
+    bool publish_pose = true;
+    if (state == kOk) {
+      ORB_SLAM3::Map * map = slam_->GetCurrentMap();
+      if (prev_state_ == kNotInitialized) {
+        ++epoch_;
+        cloud_.clear();
+        RCLCPP_INFO(get_logger(), "새 맵 초기화 (epoch %d)", epoch_);
+      } else if (map != epoch_map_) {
+        ++epoch_;
+        cloud_.clear();
+        // 병합은 LoopClosing 스레드에서 끝나므로, 위의 TrackMonocular 가 병합 전 좌표계로
+        // 끝난 직후에 맵이 바뀌었을 수 있다. 이 프레임 포즈는 어느 좌표계인지 알 수 없어
+        // 버린다. 다음 프레임부터는 병합 뒤에 추적하므로 새 좌표계다.
+        publish_pose = false;
+        RCLCPP_INFO(
+          get_logger(), "현재 맵이 바뀜 — 맵 병합 또는 다른 맵에서 재위치 추정 (epoch %d)", epoch_);
+      }
+      epoch_map_ = map;
     }
     if (slam_->MapChanged()) {
       ++big_changes_;
@@ -242,7 +262,7 @@ private:
     st.data = {state, epoch_, big_changes_};
     state_pub_->publish(st);
 
-    if (state != kOk) {
+    if (state != kOk || !publish_pose) {
       return;
     }
 
@@ -336,6 +356,7 @@ private:
 
   int prev_state_{ORB_SLAM3::Tracking::NO_IMAGES_YET};
   int epoch_{0};
+  ORB_SLAM3::Map * epoch_map_{nullptr};  // 지금 epoch 의 맵. 비교에만 쓰고 역참조하지 않는다
   int big_changes_{0};
   double last_stamp_{0.0};
   int frame_gaps_{0};
